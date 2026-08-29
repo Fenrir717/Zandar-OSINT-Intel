@@ -114,49 +114,53 @@ async def _collect(collection_id: str, run_id: str) -> dict:
 
 
 @celery_app.task(bind=True)
-def classify_investigation(self, investigation_id: str, batch_size: int = 200) -> dict:
-    """Klasifikasi semua komentar investigasi yang belum punya baris `analyses`.
-    Batch inference (Tier L) → upsert analyses. Idempoten: hanya komentar tanpa analisis."""
-    return asyncio.run(_classify(investigation_id, batch_size))
+def classify_investigation(
+    self, investigation_id: str, batch_size: int = 200, reclassify: bool = False
+) -> dict:
+    """Klasifikasi komentar investigasi → upsert `analyses`.
+    reclassify=False (default): hanya komentar tanpa analisis (idempoten).
+    reclassify=True: proses ulang SEMUA (mis. setelah ganti CLASSIFIER_PROVIDER)."""
+    return asyncio.run(_classify(investigation_id, batch_size, reclassify))
 
 
-async def _classify(investigation_id: str, batch_size: int) -> dict:
+async def _classify(investigation_id: str, batch_size: int, reclassify: bool = False) -> dict:
     clf = get_classifier()
     analyzed = 0
+    seen: set = set()  # saat reclassify, hindari loop tak henti (upsert tak mengurangi kandidat)
     async with SessionLocal() as session:
         while True:
-            # Komentar investigasi ini yang belum ada di analyses
-            result = await session.execute(
-                select(Comment.id, Comment.content)
-                .outerjoin(Analysis, Analysis.comment_id == Comment.id)
-                .where(
-                    Comment.investigation_id == uuid.UUID(investigation_id),
-                    Analysis.comment_id.is_(None),
-                )
-                .limit(batch_size)
+            stmt = select(Comment.id, Comment.content).where(
+                Comment.investigation_id == uuid.UUID(investigation_id)
             )
-            rows = result.all()
+            if reclassify:
+                if seen:
+                    stmt = stmt.where(Comment.id.notin_(seen))
+            else:
+                stmt = stmt.outerjoin(Analysis, Analysis.comment_id == Comment.id).where(
+                    Analysis.comment_id.is_(None)
+                )
+            rows = (await session.execute(stmt.limit(batch_size))).all()
             if not rows:
                 break
 
             labels = clf.classify([content for _, content in rows])
             now = datetime.now(UTC)
             for (cid, _), lab in zip(rows, labels, strict=True):
-                stmt = (
-                    pg_insert(Analysis)
-                    .values(
-                        comment_id=cid,
-                        sentiment=lab.sentiment,
-                        sentiment_score=lab.sentiment_score,
-                        emotion=lab.emotion,
-                        intent=lab.intent,
-                        toxicity=lab.toxicity,
-                        model_version=lab.model_version,
-                        analyzed_at=now,
-                    )
-                    .on_conflict_do_nothing(index_elements=["comment_id"])
+                values = dict(
+                    comment_id=cid, sentiment=lab.sentiment, sentiment_score=lab.sentiment_score,
+                    emotion=lab.emotion, intent=lab.intent, toxicity=lab.toxicity,
+                    model_version=lab.model_version, analyzed_at=now,
                 )
-                await session.execute(stmt)
+                ins = pg_insert(Analysis).values(**values)
+                if reclassify:
+                    stmt2 = ins.on_conflict_do_update(
+                        index_elements=["comment_id"],
+                        set_={k: values[k] for k in values if k != "comment_id"},
+                    )
+                    seen.add(cid)
+                else:
+                    stmt2 = ins.on_conflict_do_nothing(index_elements=["comment_id"])
+                await session.execute(stmt2)
                 analyzed += 1
             await session.commit()
 

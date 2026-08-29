@@ -141,6 +141,33 @@ Divalidasi di Windows 11 + Docker Desktop. Beberapa penyesuaian yang sudah diter
   langsung; untuk worker terjadwal, jalankan worker di dalam WSL atau Python 3.12.
   Ini item terbuka Fase 1, bukan cacat pipeline.
 
+## Klasifikasi lokal IndoBERT (opsional, Fase 2)
+
+Baseline `lexicon` (default) jalan tanpa dependensi. Untuk classifier kontekstual
+IndoBERT (menangkap nuansa yang leksikon lewatkan, mis. "ekonomi rapuh"→negatif):
+
+```bash
+pip install -e ".[ml]"          # torch + transformers (~2.5GB)
+# lalu di .env:
+CLASSIFIER_PROVIDER=indobert
+```
+
+Provider `indobert` bersifat HIBRIDA: RoBERTa fine-tuned Indonesia untuk sentimen +
+leksikon untuk emosi/intent/toksisitas. Model diunduh sekali dari HuggingFace (~500MB).
+
+**CPU vs GPU:** `pip install torch` default di Windows = CPU-only (~22 komentar/dtk;
+100rb komentar ≈ 75 menit). Untuk GPU (RTX 3050, ~5-10× lebih cepat), pasang build CUDA:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
+```
+
+Bandingkan provider pada data nyata (preview bake-off):
+
+```bash
+python scripts/classifier_compare.py --a lexicon --b indobert --limit 300
+```
+
 ## Observability (opsional)
 
 ```bash
