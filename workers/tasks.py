@@ -15,9 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.db import SessionLocal
-from core.models import Collection, CollectionRun, Comment, Source
+from core.models import Analysis, Collection, CollectionRun, Comment, Source
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
+from workers.classify import get_classifier
 from workers.enrichment import enrich
 from workers.raw_lake import ensure_bucket, put_raw
 
@@ -110,6 +111,56 @@ async def _collect(collection_id: str, run_id: str) -> dict:
         collection.last_run_at = run.finished_at
         await session.commit()
         return {"status": run.status, "items_collected": inserted}
+
+
+@celery_app.task(bind=True)
+def classify_investigation(self, investigation_id: str, batch_size: int = 200) -> dict:
+    """Klasifikasi semua komentar investigasi yang belum punya baris `analyses`.
+    Batch inference (Tier L) → upsert analyses. Idempoten: hanya komentar tanpa analisis."""
+    return asyncio.run(_classify(investigation_id, batch_size))
+
+
+async def _classify(investigation_id: str, batch_size: int) -> dict:
+    clf = get_classifier()
+    analyzed = 0
+    async with SessionLocal() as session:
+        while True:
+            # Komentar investigasi ini yang belum ada di analyses
+            result = await session.execute(
+                select(Comment.id, Comment.content)
+                .outerjoin(Analysis, Analysis.comment_id == Comment.id)
+                .where(
+                    Comment.investigation_id == uuid.UUID(investigation_id),
+                    Analysis.comment_id.is_(None),
+                )
+                .limit(batch_size)
+            )
+            rows = result.all()
+            if not rows:
+                break
+
+            labels = clf.classify([content for _, content in rows])
+            now = datetime.now(UTC)
+            for (cid, _), lab in zip(rows, labels, strict=True):
+                stmt = (
+                    pg_insert(Analysis)
+                    .values(
+                        comment_id=cid,
+                        sentiment=lab.sentiment,
+                        sentiment_score=lab.sentiment_score,
+                        emotion=lab.emotion,
+                        intent=lab.intent,
+                        toxicity=lab.toxicity,
+                        model_version=lab.model_version,
+                        analyzed_at=now,
+                    )
+                    .on_conflict_do_nothing(index_elements=["comment_id"])
+                )
+                await session.execute(stmt)
+                analyzed += 1
+            await session.commit()
+
+    return {"investigation_id": investigation_id, "analyzed": analyzed, "model": clf.version}
 
 
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:

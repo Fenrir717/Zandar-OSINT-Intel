@@ -28,6 +28,12 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
 ]
+# Jalur klasifikasi lokal IndoBERT (berat: torch ~2.5GB, model ~500MB). Opsional —
+# baseline leksikon jalan tanpa ini. Pasang saat siap: pip install -e ".[ml]"
+ml = [
+    "torch>=2.2",
+    "transformers>=4.44",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

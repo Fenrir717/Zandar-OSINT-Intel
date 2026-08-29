@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.routers import auth, collections, comments, investigations, sources
+from api.routers import analysis, auth, collections, comments, investigations, sources
 from core.config import get_settings
 
 DIST_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -29,6 +29,7 @@ app.include_router(investigations.router, prefix="/api/v1")
 app.include_router(sources.router, prefix="/api/v1")
 app.include_router(collections.router, prefix="/api/v1")
 app.include_router(comments.router, prefix="/api/v1")
+app.include_router(analysis.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])

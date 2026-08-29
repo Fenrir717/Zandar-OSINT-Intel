@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""
 
+    # Klasifikasi (Fase 2) — lexicon (default, tanpa GPU) | indobert | flash
+    classifier_provider: str = "lexicon"
+    indobert_sentiment_model: str = "w11wo/indonesian-roberta-base-sentiment-classifier"
+
     langfuse_host: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
