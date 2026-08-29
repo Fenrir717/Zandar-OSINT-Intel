@@ -81,7 +81,8 @@ python scripts/create_admin.py --email admin@zandar.local --password gantipasswo
 uvicorn api.main:app --reload
 ```
 
-Frontend Comment Explorer: **http://localhost:8000/** (disajikan API, same-origin).
+Frontend (React SPA, di-build ke `web/dist`, disajikan API): **http://localhost:8000/**
+Dev frontend: `cd web && npm install && npm run dev` (Vite :5173, proxy ke API).
 Swagger UI: http://localhost:8000/docs
 
 Servis (port terisolasi, lihat Catatan Windows): Neo4j http://localhost:7475 ·

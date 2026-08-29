@@ -28,6 +28,10 @@ celerybeat.pid
 .DS_Store
 Thumbs.db
 
-# Frontend (nanti di Fase 1+)
+# Frontend
 node_modules/
 web/dist/
+web/*.tsbuildinfo
+
+# uipro skill (tool lokal, regenerable via `uipro init`; data/ juga tertangkap rule di atas)
+.claude/skills/ui-ux-pro-max/

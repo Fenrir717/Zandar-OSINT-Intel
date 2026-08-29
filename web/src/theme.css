@@ -1,0 +1,64 @@
+/* Zandar OSINT — design tokens.
+   Identitas petrol-teal dari PRD/wireframe (dipertahankan; menghindari "blue dashboard"
+   AI-slop). Dark-mode-ready per rekomendasi uipro untuk sesi analis panjang. */
+
+:root {
+  --bg: #F4F7F6;
+  --surface: #FFFFFF;
+  --surface-2: #ECF1F0;
+  --ink: #1B2733;
+  --muted: #56676F;
+  --accent: #0E6B62;
+  --accent-ink: #0A5049;
+  --accent-soft: #E1EEEB;
+  --line: #D7E0DE;
+  --ok: #2E7D4F;
+  --ok-soft: #E3F0E8;
+  --warn: #96660D;
+  --warn-soft: #F6EDDA;
+  --crit: #A83A32;
+  --crit-soft: #F7E5E3;
+  --shadow: 0 1px 2px rgba(20, 40, 45, .05), 0 4px 16px rgba(20, 40, 45, .04);
+
+  --font-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Spline Sans Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 8px;
+  --sidebar-w: 224px;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0E1518;
+  --surface: #151F24;
+  --surface-2: #1B272D;
+  --ink: #D9E3E4;
+  --muted: #93A5AC;
+  --accent: #46A796;
+  --accent-ink: #6FC2B3;
+  --accent-soft: #14312C;
+  --line: #263740;
+  --ok: #58B37F;
+  --ok-soft: #14261B;
+  --warn: #D2A050;
+  --warn-soft: #2E2717;
+  --crit: #D97B72;
+  --crit-soft: #331D1B;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+button { font-family: inherit; cursor: pointer; }
+::selection { background: var(--accent-soft); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
