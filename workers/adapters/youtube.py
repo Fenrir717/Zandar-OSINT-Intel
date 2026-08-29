@@ -21,6 +21,10 @@ API = "https://www.googleapis.com/youtube/v3/commentThreads"
 
 class YouTubeAdapter(BaseAdapter):
     platform = "youtube"
+    tier = "free"
+    requires_credentials = True
+    rate_note = "Kuota 10.000 unit/hari; commentThreads 1 unit/permintaan."
+    legal_note = "API resmi; hanya komentar publik."
 
     def collect(self, query: dict) -> Iterator[RawItem]:
         api_key = self.config.get("api_key") or get_settings().youtube_api_key

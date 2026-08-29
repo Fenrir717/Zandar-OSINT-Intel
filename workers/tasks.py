@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.db import SessionLocal
 from core.models import Collection, CollectionRun, Comment, Source
-from workers.adapters import ADAPTERS
+from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
 from workers.enrichment import enrich
 from workers.raw_lake import ensure_bucket, put_raw
@@ -92,7 +92,12 @@ async def _collect(collection_id: str, run_id: str) -> dict:
                     await session.commit()
 
             run.status = "done"
-        except NotImplementedError as exc:
+        except CostGuardRejected as exc:
+            # Sumber metered dipanggil tanpa persetujuan biaya — bukan bug, tapi
+            # penolakan yang disengaja; jangan retry.
+            run.status = "failed"
+            run.error = f"Cost guard: {exc}"
+        except (AdapterNotConfigured, NotImplementedError) as exc:
             run.status = "failed"
             run.error = str(exc)
         except Exception as exc:  # kegagalan adapter dicatat, tidak meledak tanpa jejak

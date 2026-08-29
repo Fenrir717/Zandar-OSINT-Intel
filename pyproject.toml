@@ -19,6 +19,7 @@ dependencies = [
     "feedparser>=6.0",
     "langdetect>=1.0.9",
     "minio>=7.2",
+    "trafilatura>=2.0",
 ]
 
 [project.optional-dependencies]

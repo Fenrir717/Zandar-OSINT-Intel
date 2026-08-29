@@ -6,12 +6,15 @@ from sqlalchemy import select
 
 from api.deps import CurrentUser, DbSession, require_role
 from core.models import AuditLog, Source
+from workers.adapters import PLATFORMS, describe_all
 
 router = APIRouter(prefix="/sources", tags=["sources"])
 
+_PLATFORM_PATTERN = f"^({'|'.join(PLATFORMS)})$"
+
 
 class SourceCreate(BaseModel):
-    platform: str = Field(pattern="^(rss|youtube|reddit|telegram|forum)$")
+    platform: str = Field(pattern=_PLATFORM_PATTERN)
     config: dict | None = None
 
 
@@ -21,6 +24,14 @@ class SourceOut(BaseModel):
     status: str
 
     model_config = {"from_attributes": True}
+
+
+@router.get("/adapters")
+async def list_adapters(user: CurrentUser) -> list[dict]:
+    """Kemampuan tiap adapter: tier akses, kebutuhan kredensial, batas, catatan biaya & legal.
+    Dipakai UI Sources dan Graph A `select_sources` agar planner tidak memilih
+    sumber yang belum siap atau berbiaya tanpa persetujuan."""
+    return describe_all()
 
 
 @router.get("", response_model=list[SourceOut])

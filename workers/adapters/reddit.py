@@ -23,6 +23,10 @@ USER_AGENT = "windows:zandar-osint:v0.1 (research)"
 
 class RedditAdapter(BaseAdapter):
     platform = "reddit"
+    tier = "free"
+    requires_credentials = False
+    rate_note = "Endpoint JSON publik; jeda 2 detik antar subreddit. OAuth (100 req/menit) menyusul."
+    legal_note = "Tier gratis hanya untuk penggunaan non-komersial; komersial butuh kontrak Reddit."
 
     def collect(self, query: dict) -> Iterator[RawItem]:
         keywords = query.get("keywords", [])

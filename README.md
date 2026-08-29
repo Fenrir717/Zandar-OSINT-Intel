@@ -18,6 +18,30 @@ mengklasifikasi, database mengingat.**
 | 4 | Graph D (laporan ber-sitasi), hardening | ⬜ |
 | 5 | Graph E (verifikasi klaim) | ⬜ |
 
+## Adapter koleksi (11 platform, 3 tier akses)
+
+Adapter berbagi satu kontrak (`collect(query) → RawItem[]`) dan mendeklarasikan
+metadata akses yang dibaca UI, planner, dan estimasi biaya — cek via
+`GET /api/v1/sources/adapters`.
+
+| Tier | Platform | Jalur akses | Catatan |
+|------|----------|-------------|---------|
+| **free** | `rss` | Feed RSS/Atom | Ringkasan dari feed |
+| | `news` | GDELT DOC 2.0 → trafilatura | Gratis tanpa key, 65 bahasa; teks penuh |
+| | `blog` | Autodiscovery feed → trafilatura | Teks penuh tiap tulisan |
+| | `website` | sitemap.xml / URL → trafilatura | Crawl terbatas, hormat robots.txt |
+| | `forum` | Discourse JSON publik | Non-Discourse pakai `website` |
+| | `github` | REST API resmi | 5rb req/jam; search 30 req/menit |
+| | `youtube` | Data API v3 | Kuota 10rb unit/hari |
+| | `reddit` | JSON publik | Komersial butuh kontrak Reddit |
+| | `telegram` | MTProto (menyusul) | Butuh sesi Telethon |
+| **metered** | `x` | API v2 pay-per-use | ~$0,005/post; **cost guard wajib** |
+| **vendor** | `tiktok` | Penyedia data berkontrak | Tak ada akses komersial resmi |
+
+`news`, `blog`, `website` (dan fallback `rss`) berbagi modul ekstraksi
+[`web_extract.py`](workers/adapters/web_extract.py) — mereka berbeda hanya pada
+cara **menemukan** URL, bukan cara mengambil teks.
+
 ## Struktur
 
 ```

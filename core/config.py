@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # Kredensial sumber (Fase 1)
     youtube_api_key: str = ""
+    github_token: str = ""
+    x_bearer_token: str = ""  # sumber metered — lihat XAdapter cost guard
 
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""

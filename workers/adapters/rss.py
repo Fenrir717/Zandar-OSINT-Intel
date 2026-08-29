@@ -21,6 +21,10 @@ USER_AGENT = "ZandarOSINT/0.1 (research; contact via repo)"
 
 class RssAdapter(BaseAdapter):
     platform = "rss"
+    tier = "free"
+    requires_credentials = False
+    rate_note = "Jeda 1 detik antar feed; tanpa batas resmi."
+    legal_note = "Feed dipublikasikan untuk konsumsi mesin."
 
     def collect(self, query: dict) -> Iterator[RawItem]:
         feeds: list[str] = query.get("feeds", [])
