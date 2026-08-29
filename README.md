@@ -111,6 +111,20 @@ pytest -q
 ruff check .
 ```
 
+## Catatan Windows (penting)
+
+Divalidasi di Windows 11 + Docker Desktop. Beberapa penyesuaian yang sudah diterapkan:
+
+- **Port digeser ke rentang terisolasi** (`5433/6380/6335-6336/7475/7688/9002-9003`)
+  agar tidak bentrok dengan stack lain di WSL/host. Lihat `docker-compose.yml`.
+- **Gunakan `127.0.0.1`, bukan `localhost`, di `.env`.** Pada Windows, `localhost`
+  dapat resolve ke IPv6/WSL lebih dulu dan membuat koneksi MinIO hang ~21 detik
+  per permintaan. `.env.example` sudah memakai `127.0.0.1`.
+- **Celery worker native belum stabil di Windows + Python 3.14** (consumer solo-pool
+  menggantung sebelum `ready`). Pipeline koleksi sudah terbukti benar bila dipicu
+  langsung; untuk worker terjadwal, jalankan worker di dalam WSL atau Python 3.12.
+  Ini item terbuka Fase 1, bukan cacat pipeline.
+
 ## Observability (opsional)
 
 ```bash
