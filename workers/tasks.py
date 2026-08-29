@@ -10,6 +10,7 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 
+from croniter import croniter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -111,8 +112,59 @@ async def _collect(collection_id: str, run_id: str) -> dict:
         return {"status": run.status, "items_collected": inserted}
 
 
-async def _latest_run_ids() -> list[str]:
-    """Dipakai beat (Fase 1 lanjutan) — placeholder agar import bersih."""
+def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:
+    """True bila tick cron terakhir (<= now) belum tercakup last_run_at.
+
+    Contoh: cron '0 */6 * * *' (tiap 6 jam). Bila fire terjadwal terakhir jam 12:00
+    dan last_run_at jam 06:30, maka jatuh tempo. Bila last_run_at jam 12:05, belum.
+    """
+    if not croniter.is_valid(cron_expr):
+        return False
+    prev_fire = croniter(cron_expr, now).get_prev(datetime)  # tick terjadwal terakhir <= now
+    if last_run_at is None:
+        return True
+    if last_run_at.tzinfo is None:
+        last_run_at = last_run_at.replace(tzinfo=UTC)
+    return last_run_at < prev_fire
+
+
+@celery_app.task
+def dispatch_due_collections() -> dict:
+    """Beat memanggil ini tiap 60 dtk: enqueue collect_source untuk collection
+    yang schedule_cron-nya jatuh tempo. Jadwal ada di DB agar bisa diubah via API."""
+    return asyncio.run(_dispatch_due())
+
+
+async def _dispatch_due() -> dict:
+    now = datetime.now(UTC)
+    dispatched: list[str] = []
     async with SessionLocal() as session:
-        result = await session.execute(select(CollectionRun.id).limit(1))
-        return [str(r) for r in result.scalars().all()]
+        result = await session.execute(
+            select(Collection).where(Collection.schedule_cron.is_not(None))
+        )
+        collections = list(result.scalars().all())
+
+        for col in collections:
+            if not _is_due(col.schedule_cron, col.last_run_at, now):
+                continue
+            # Lewati bila sudah ada run antre/berjalan untuk collection ini (anti dobel-dispatch)
+            active = await session.execute(
+                select(CollectionRun.id)
+                .where(
+                    CollectionRun.collection_id == col.id,
+                    CollectionRun.status.in_(("queued", "running")),
+                )
+                .limit(1)
+            )
+            if active.scalar_one_or_none() is not None:
+                continue
+
+            run = CollectionRun(collection_id=col.id, status="queued")
+            session.add(run)
+            col.last_run_at = now  # tandai tick cron ini tertangani (cegah re-dispatch)
+            await session.flush()
+            collect_source.delay(str(col.id), str(run.id))
+            dispatched.append(str(col.id))
+
+        await session.commit()
+    return {"checked": len(collections), "dispatched": dispatched}

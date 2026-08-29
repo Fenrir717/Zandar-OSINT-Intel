@@ -18,6 +18,10 @@ data/
 *.db
 *.sqlite3
 
+# Celery beat state
+celerybeat-schedule*
+celerybeat.pid
+
 # IDE / OS
 .idea/
 .vscode/

@@ -12,7 +12,7 @@ mengklasifikasi, database mengingat.**
 | Fase | Isi | Status |
 |------|-----|--------|
 | 0 | Monorepo, docker-compose, FastAPI + JWT/RBAC, Alembic, CI | ✅ ini |
-| 1 | Adapter koleksi (RSS/YouTube/Reddit/Telegram), enrichment deterministik | ⬜ |
+| 1 | 11 adapter koleksi, enrichment deterministik, worker+beat, Comment Explorer | ✅ |
 | 2 | IndoBERT/Flash-LLM, Qdrant, LangGraph Graph A & C | ⬜ |
 | 3 | Neo4j, deteksi CIB, forensik narasi (kuadran) | ⬜ |
 | 4 | Graph D (laporan ber-sitasi), hardening | ⬜ |
@@ -81,13 +81,28 @@ python scripts/create_admin.py --email admin@zandar.local --password gantipasswo
 uvicorn api.main:app --reload
 ```
 
-Swagger UI: http://localhost:8000/docs · Neo4j Browser: http://localhost:7474 ·
-MinIO Console: http://localhost:9001 · Qdrant: http://localhost:6333/dashboard
+Frontend Comment Explorer: **http://localhost:8000/** (disajikan API, same-origin).
+Swagger UI: http://localhost:8000/docs
 
-Worker Celery (opsional di Fase 0):
+Servis (port terisolasi, lihat Catatan Windows): Neo4j http://localhost:7475 ·
+MinIO Console http://localhost:9003 · Qdrant http://localhost:6335/dashboard
+
+### Worker & scheduler (koleksi terjadwal)
+
+Worker menjalankan job koleksi; beat memicu koleksi ber-`schedule_cron` (tiap 60 dtk
+mengecek collection yang jatuh tempo). Di Windows pakai skrip berikut (sudah memakai
+`--pool=threads` yang wajib):
 
 ```bash
-celery -A workers.celery_app worker --loglevel=info --pool=solo
+powershell -File scripts/run_worker.ps1
+powershell -File scripts/run_beat.ps1
+```
+
+Non-Windows setara:
+
+```bash
+celery -A workers.celery_app worker --loglevel=info -Q default,collect
+celery -A workers.celery_app beat --loglevel=info
 ```
 
 ## Uji gate Fase 0

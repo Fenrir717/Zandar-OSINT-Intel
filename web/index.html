@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zandar OSINT — Comment Explorer</title>
+<style>
+  :root {
+    --bg:#F4F7F6; --surface:#fff; --surface-2:#ECF1F0; --ink:#1B2733; --muted:#56676F;
+    --accent:#0E6B62; --accent-ink:#0A5049; --accent-soft:#E1EEEB; --line:#D7E0DE;
+    --ok:#2E7D4F; --warn:#96660D; --crit:#A83A32;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }
+  button { font-family:inherit; cursor:pointer; }
+  a { color:var(--accent-ink); }
+  .hidden { display:none !important; }
+
+  /* Login */
+  #login { min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:8px; }
+  #login .card { width:340px; padding:28px; }
+  #login h1 { font-size:19px; margin:0 0 4px; display:flex; align-items:center; gap:10px; }
+  #login .sub { color:var(--muted); font-size:12px; margin:0 0 20px; }
+  label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; margin:12px 0 5px; }
+  input, select { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:6px; font-size:14px; background:var(--surface); color:var(--ink); }
+  input:focus, select:focus { outline:2px solid var(--accent-soft); border-color:var(--accent); }
+  .btn { background:var(--accent); color:#fff; border:1px solid var(--accent-ink); border-radius:6px; padding:9px 16px; font-weight:600; font-size:13px; }
+  .btn:hover { background:var(--accent-ink); }
+  .btn.ghost { background:var(--surface); color:var(--ink); border-color:var(--line); }
+  .err { color:var(--crit); font-size:12px; margin-top:10px; min-height:16px; }
+
+  /* Shell */
+  #app { display:grid; grid-template-columns:220px 1fr; min-height:100vh; }
+  aside { background:var(--surface); border-right:1px solid var(--line); padding:16px 12px; }
+  .brand { display:flex; align-items:center; gap:10px; padding:4px 8px 18px; }
+  .logo { width:32px; height:32px; border-radius:6px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; }
+  .brand b { font-size:15px; } .brand span { font-size:10px; color:var(--muted); display:block; }
+  .navlbl { font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); font-weight:700; padding:10px 12px 4px; }
+  .nav { font-size:13px; color:var(--muted); padding:8px 12px; border-radius:6px; }
+  .nav.active { background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
+
+  main { padding:20px 26px; min-width:0; }
+  header.top { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+  header.top h2 { font-size:20px; margin:0; }
+  header.top .spacer { flex:1; }
+  .who { font-size:12px; color:var(--muted); }
+
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .tile { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px 14px; }
+  .tile .k { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; }
+  .tile .v { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+  .tabs { display:flex; gap:6px; margin-bottom:14px; }
+  .tab { font-size:13px; padding:7px 14px; border:1px solid var(--line); border-radius:999px; background:var(--surface); color:var(--muted); }
+  .tab.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+
+  .filters { display:flex; gap:8px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+  .filters input[type=text] { flex:1; min-width:200px; }
+  .filters select { width:auto; }
+
+  .comment { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:13px 15px; margin-bottom:10px; }
+  .comment.bot { border-color:var(--crit); }
+  .crow { display:flex; align-items:center; gap:10px; margin-bottom:7px; }
+  .av { width:28px; height:28px; border-radius:50%; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:var(--muted); }
+  .cmeta { font-size:11px; color:var(--muted); }
+  .cmeta b { color:var(--ink); font-weight:600; }
+  .pill { font-size:10px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); white-space:nowrap; }
+  .pill.id { border-color:var(--accent); color:var(--accent-ink); }
+  .ctext { font-size:13px; line-height:1.5; }
+  .cfoot { margin-top:7px; font-size:11px; color:var(--muted); display:flex; gap:10px; align-items:center; }
+  .empty { text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--line); border-radius:8px; background:var(--surface); }
+  .runtbl { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:8px; overflow:hidden; font-size:13px; }
+  .runtbl th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:9px 12px; background:var(--surface-2); border-bottom:1px solid var(--line); }
+  .runtbl td { padding:9px 12px; border-bottom:1px solid var(--line); }
+  .st-done { color:var(--ok); font-weight:600; } .st-failed { color:var(--crit); font-weight:600; }
+  .st-running,.st-queued { color:var(--warn); font-weight:600; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="card">
+    <h1><span class="logo">◎</span> Zandar OSINT</h1>
+    <p class="sub">Enterprise Intelligence — masuk untuk melanjutkan</p>
+    <label>Email</label>
+    <input id="email" type="email" value="admin@zandar.local" autocomplete="username">
+    <label>Password</label>
+    <input id="password" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div style="margin-top:18px"><button class="btn" style="width:100%" onclick="doLogin()">Masuk</button></div>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <aside>
+    <div class="brand"><span class="logo">◎</span><div><b>Zandar OSINT</b><span>Enterprise Intelligence</span></div></div>
+    <div class="navlbl">Intelligence</div>
+    <div class="nav active">Comment Explorer</div>
+    <div class="nav">AI Analysis <span style="font-size:9px">(Fase 2)</span></div>
+    <div class="nav">Knowledge Graph <span style="font-size:9px">(Fase 3)</span></div>
+    <div class="nav">Forensik Narasi <span style="font-size:9px">(Fase 3)</span></div>
+  </aside>
+  <main>
+    <header class="top">
+      <h2>Comment Explorer</h2>
+      <select id="invSel" style="width:auto;min-width:260px" onchange="loadAll()"></select>
+      <div class="spacer"></div>
+      <span class="who" id="who"></span>
+      <button class="btn ghost" onclick="logout()">Keluar</button>
+    </header>
+
+    <div class="tiles">
+      <div class="tile"><div class="k">Total komentar</div><div class="v" id="tTotal">–</div></div>
+      <div class="tile"><div class="k">Platform</div><div class="v" id="tPlat">–</div></div>
+      <div class="tile"><div class="k">Bahasa terdeteksi</div><div class="v" id="tLang">–</div></div>
+      <div class="tile"><div class="k">Hasil terfilter</div><div class="v" id="tShown">–</div></div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" id="tabC" onclick="showTab('comments')">Komentar</div>
+      <div class="tab" id="tabR" onclick="showTab('runs')">Riwayat Koleksi</div>
+    </div>
+
+    <!-- COMMENTS TAB -->
+    <div id="viewComments">
+      <div class="filters">
+        <input id="q" type="text" placeholder="Cari isi komentar…" onkeydown="if(event.key==='Enter')loadComments()">
+        <select id="fPlat" onchange="loadComments()"><option value="">Semua platform</option></select>
+        <select id="fLang" onchange="loadComments()"><option value="">Semua bahasa</option></select>
+        <button class="btn" onclick="loadComments()">Cari</button>
+      </div>
+      <div id="commentList"></div>
+    </div>
+
+    <!-- RUNS TAB -->
+    <div id="viewRuns" class="hidden"></div>
+  </main>
+</div>
+
+<script>
+const API = "/api/v1";
+let TOKEN = localStorage.getItem("zandar_token") || "";
+let INVS = [];
+
+function authHeaders(){ return { "Authorization":"Bearer "+TOKEN }; }
+async function api(path, opts={}){
+  const r = await fetch(API+path, {...opts, headers:{...(opts.headers||{}), ...authHeaders()}});
+  if(r.status===401){ logout(); throw new Error("Sesi berakhir"); }
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.status===204 ? null : r.json();
+}
+
+async function doLogin(){
+  const email=document.getElementById("email").value.trim();
+  const pw=document.getElementById("password").value;
+  const err=document.getElementById("loginErr"); err.textContent="";
+  try{
+    const body=new URLSearchParams({username:email,password:pw});
+    const r=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+    if(!r.ok){ err.textContent="Email atau password salah"; return; }
+    const j=await r.json(); TOKEN=j.access_token; localStorage.setItem("zandar_token",TOKEN);
+    await startApp();
+  }catch(e){ err.textContent="Gagal terhubung ke API"; }
+}
+function logout(){ TOKEN=""; localStorage.removeItem("zandar_token"); document.getElementById("app").classList.add("hidden"); document.getElementById("login").classList.remove("hidden"); }
+
+async function startApp(){
+  try{ const me=await api("/auth/me"); document.getElementById("who").textContent=me.name+" · "+me.role; }
+  catch(e){ logout(); return; }
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  INVS=await api("/investigations");
+  const sel=document.getElementById("invSel");
+  sel.innerHTML = INVS.length ? INVS.map(i=>`<option value="${i.id}">${esc(i.title)}</option>`).join("")
+                              : `<option>(belum ada investigasi)</option>`;
+  if(INVS.length) await loadAll();
+}
+
+function currentInv(){ return document.getElementById("invSel").value; }
+function showTab(t){
+  document.getElementById("tabC").classList.toggle("active",t==="comments");
+  document.getElementById("tabR").classList.toggle("active",t==="runs");
+  document.getElementById("viewComments").classList.toggle("hidden",t!=="comments");
+  document.getElementById("viewRuns").classList.toggle("hidden",t!=="runs");
+  if(t==="runs") loadRuns();
+}
+
+async function loadAll(){ await Promise.all([loadStats(), loadComments()]); }
+
+async function loadStats(){
+  const inv=currentInv(); if(!inv) return;
+  try{
+    const s=await api(`/comments/stats?investigation_id=${inv}`);
+    document.getElementById("tTotal").textContent=s.total.toLocaleString("id");
+    const plats=Object.entries(s.by_platform);
+    document.getElementById("tPlat").textContent=plats.length;
+    document.getElementById("tLang").textContent=Object.keys(s.by_lang).length;
+    // isi dropdown filter platform/bahasa
+    fillFilter("fPlat","Semua platform",plats.map(([k])=>k));
+    fillFilter("fLang","Semua bahasa",Object.keys(s.by_lang));
+  }catch(e){}
+}
+function fillFilter(id,allLabel,vals){
+  const sel=document.getElementById(id), cur=sel.value;
+  sel.innerHTML=`<option value="">${allLabel}</option>`+vals.map(v=>`<option value="${v}">${esc(v)}</option>`).join("");
+  sel.value=cur;
+}
+
+async function loadComments(){
+  const inv=currentInv(); if(!inv) return;
+  const q=document.getElementById("q").value.trim();
+  const plat=document.getElementById("fPlat").value, lang=document.getElementById("fLang").value;
+  const p=new URLSearchParams({investigation_id:inv,limit:"100"});
+  if(q)p.set("q",q); if(plat)p.set("platform",plat); if(lang)p.set("lang",lang);
+  const list=document.getElementById("commentList");
+  list.innerHTML=`<div class="empty">Memuat…</div>`;
+  try{
+    const rows=await api("/comments/search?"+p.toString());
+    document.getElementById("tShown").textContent=rows.length;
+    if(!rows.length){ list.innerHTML=`<div class="empty">Tidak ada komentar cocok. Jalankan koleksi dulu, atau longgarkan filter.</div>`; return; }
+    list.innerHTML=rows.map(renderComment).join("");
+  }catch(e){ list.innerHTML=`<div class="empty">Gagal memuat komentar.</div>`; }
+}
+function renderComment(c){
+  const av=(c.author_hash||"?").slice(0,2);
+  const langPill=c.lang?`<span class="pill ${c.lang==='id'?'id':''}">${esc(c.lang)}</span>`:"";
+  const src=c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">sumber ↗</a>`:"";
+  const when=c.published_at?new Date(c.published_at).toLocaleDateString("id"):"";
+  return `<div class="comment">
+    <div class="crow">
+      <div class="av">${esc(av)}</div>
+      <div class="cmeta"><b>${esc((c.author_hash||"").slice(0,12))}…</b> <span style="opacity:.7">(pseudonim)</span><br>${esc(c.platform)} · ${when}</div>
+      <div style="flex:1"></div>${langPill}
+    </div>
+    <div class="ctext">${esc(c.content)}</div>
+    <div class="cfoot">${src}</div>
+  </div>`;
+}
+
+async function loadRuns(){
+  const inv=currentInv(); const v=document.getElementById("viewRuns");
+  v.innerHTML=`<div class="empty">Memuat…</div>`;
+  try{
+    const cols=await api(`/collections?investigation_id=${inv}`);
+    if(!cols.length){ v.innerHTML=`<div class="empty">Belum ada koleksi untuk investigasi ini.</div>`; return; }
+    let html="";
+    for(const col of cols){
+      const runs=await api(`/collections/${col.id}/runs`);
+      html+=`<div class="card" style="padding:14px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <b>Koleksi</b> <span class="pill">${esc(JSON.stringify(col.query).slice(0,60))}…</span>
+          <div style="flex:1"></div>
+          <span class="cmeta">cron: ${esc(col.schedule_cron||"manual")}</span>
+        </div>
+        <table class="runtbl"><thead><tr><th>Status</th><th>Item</th><th>Mulai</th><th>Selesai</th><th>Error</th></tr></thead><tbody>
+        ${runs.length?runs.map(r=>`<tr>
+          <td class="st-${r.status}">${r.status}</td>
+          <td style="font-variant-numeric:tabular-nums">${r.items_collected}</td>
+          <td>${fmt(r.started_at)}</td><td>${fmt(r.finished_at)}</td>
+          <td style="color:var(--crit)">${esc(r.error||"")}</td>
+        </tr>`).join(""):`<tr><td colspan="5" style="color:var(--muted)">belum ada run</td></tr>`}
+        </tbody></table></div>`;
+    }
+    v.innerHTML=html;
+  }catch(e){ v.innerHTML=`<div class="empty">Gagal memuat riwayat.</div>`; }
+}
+
+function fmt(t){ return t?new Date(t).toLocaleString("id"):"–"; }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+// auto-login bila token tersimpan
+if(TOKEN) startApp();
+</script>
+</body>
+</html>
