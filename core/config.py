@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     classifier_provider: str = "lexicon"
     indobert_sentiment_model: str = "w11wo/indonesian-roberta-base-sentiment-classifier"
 
+    # Orkestrasi LangGraph (Fase 2) — stub (default, tanpa API key) | openrouter | anthropic
+    llm_provider: str = "stub"
+    llm_model_r: str = "z-ai/glm-4.6"  # Tier R (reasoning)
+    llm_model_f: str = "z-ai/glm-4.5-air"  # Tier F (flash worker)
+
     langfuse_host: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
