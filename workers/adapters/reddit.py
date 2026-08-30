@@ -34,15 +34,18 @@ class RedditAdapter(BaseAdapter):
         limit = min(int(query.get("limit", 100)), 100)
         sort = query.get("sort", "new")
 
-        for sub in query.get("subreddits", []):
-            url = f"https://www.reddit.com/r/{sub}/search.json"
+        # Tiap target = (subreddit|None, restrict). Tanpa subreddit → pencarian
+        # GLOBAL seluruh Reddit (scan keyword-only tetap dapat hasil).
+        subs = query.get("subreddits", [])
+        targets = [(s, 1) for s in subs] if subs else [(None, 0)]
+
+        for sub, restrict in targets:
+            url = f"https://www.reddit.com/r/{sub}/search.json" if sub else "https://www.reddit.com/search.json"
+            params = {"q": q, "sort": sort, "limit": limit}
+            if restrict:
+                params["restrict_sr"] = 1
             try:
-                resp = httpx.get(
-                    url,
-                    params={"q": q, "restrict_sr": 1, "sort": sort, "limit": limit},
-                    headers={"User-Agent": USER_AGENT},
-                    timeout=30,
-                )
+                resp = httpx.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=30)
                 resp.raise_for_status()
             except httpx.HTTPError:
                 continue

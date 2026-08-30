@@ -41,7 +41,9 @@ class ForumAdapter(BaseAdapter):
     def collect(self, query: dict) -> Iterator[RawItem]:
         base = (query.get("base_url") or self.config.get("base_url") or "").rstrip("/")
         if not base:
-            raise ValueError("Adapter forum butuh 'base_url' pada query atau config sumber")
+            # Tanpa base_url forum spesifik, tak ada pencarian keyword universal →
+            # fail-soft (0 item, bukan error), agar scan keyword-only tak gagal.
+            return
 
         keywords = query.get("keywords", [])
         max_topics = int(query.get("max_topics", 20))

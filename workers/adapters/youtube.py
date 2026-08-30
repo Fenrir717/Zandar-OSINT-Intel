@@ -1,11 +1,14 @@
 """Adapter YouTube Data API v3 — commentThreads (1 unit/request; kuota 10rb/hari).
 
 query = {
-    "video_ids": ["abc123", ...],
+    "video_ids": ["abc123", ...],   # opsional bila 'keywords' diberi
+    "keywords": ["bisnis laundry", ...],  # → cari video relevan lalu tarik komentar
+    "max_videos": 10,               # opsional; batas video hasil pencarian keyword
     "max_per_video": 200,           # opsional
 }
-Butuh YOUTUBE_API_KEY di env. Pencarian video by keyword (100 unit/req) sengaja
-tidak dipakai default — boros kuota; daftar video ditentukan planner/analis.
+Butuh YOUTUBE_API_KEY di env. Bila video_ids kosong tapi ada keywords, adapter
+mencari video (search.list, 100 unit/panggilan) → kumpulkan komentar. Dibatasi
+`max_videos` agar hemat kuota (default 10 video ≈ 100 + 10 unit).
 """
 
 from collections.abc import Iterator
@@ -17,6 +20,7 @@ from core.config import get_settings
 from workers.adapters.base import BaseAdapter, RawItem
 
 API = "https://www.googleapis.com/youtube/v3/commentThreads"
+SEARCH_API = "https://www.googleapis.com/youtube/v3/search"
 
 
 class YouTubeAdapter(BaseAdapter):
@@ -33,7 +37,14 @@ class YouTubeAdapter(BaseAdapter):
 
         max_per_video = int(query.get("max_per_video", 200))
 
-        for video_id in query.get("video_ids", []):
+        video_ids = list(query.get("video_ids", []))
+        # Tanpa video_ids tapi ada keywords → cari video relevan (Indonesia) dulu.
+        if not video_ids and query.get("keywords"):
+            video_ids = self._search_videos(
+                api_key, query["keywords"], int(query.get("max_videos", 10))
+            )
+
+        for video_id in video_ids:
             fetched = 0
             page_token: str | None = None
             while fetched < max_per_video:
@@ -70,6 +81,26 @@ class YouTubeAdapter(BaseAdapter):
                 page_token = data.get("nextPageToken")
                 if not page_token:
                     break
+
+    def _search_videos(self, api_key: str, keywords: list[str], max_videos: int) -> list[str]:
+        """search.list: keyword → daftar video_id relevan (bahasa/region Indonesia)."""
+        q = " ".join(str(k) for k in keywords[:4])[:200]
+        params = {
+            "part": "snippet", "q": q, "type": "video",
+            "maxResults": max(1, min(int(max_videos), 50)),
+            "relevanceLanguage": "id", "regionCode": "ID",
+            "order": "relevance", "key": api_key,
+        }
+        try:
+            resp = httpx.get(SEARCH_API, params=params, timeout=30)
+            resp.raise_for_status()
+        except httpx.HTTPError:
+            return []
+        return [
+            it["id"]["videoId"]
+            for it in resp.json().get("items", [])
+            if it.get("id", {}).get("videoId")
+        ]
 
 
 def _parse_ts(value: str | None) -> datetime | None:

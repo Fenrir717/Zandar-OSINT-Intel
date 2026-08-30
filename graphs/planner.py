@@ -24,18 +24,41 @@ from graphs.llm import Usage, get_llm
 from workers.adapters import ADAPTERS, describe_all
 
 
+# Kapabilitas koleksi per adapter (untuk memandu select_sources):
+#  keyword-OK  = produktif hanya dengan keywords (tanpa URL/target)
+#  butuh-URL   = perlu base_url/feeds/urls konkret → jangan dipilih untuk scan keyword-only
+_KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube"}
+_NEEDS_TARGET = {"blog", "website", "forum", "nitter", "satudata", "ckan"}
+
+
 def _source_catalog() -> str:
-    """Katalog adapter untuk prompt select_sources — LLM harus memilih dari kunci ini."""
+    """Katalog adapter untuk prompt select_sources — LLM harus memilih dari kunci ini.
+    Ditandai kapabilitas + ketersediaan kredensial (biar plan hanya berisi sumber
+    yang benar-benar bisa mengumpulkan)."""
+    from core.config import get_settings
+
+    s = get_settings()
+    cred_ok = {
+        "youtube": bool(getattr(s, "youtube_api_key", "")),
+        "github": bool(getattr(s, "github_token", "")),
+        "telegram": bool(getattr(s, "telegram_bot_token", "")),
+        "x": bool(getattr(s, "x_bearer_token", "")),
+    }
     lines = []
     for a in describe_all():
+        k = a["key"]
         flags = []
         if a["tier"] != "free":
             flags.append(a["tier"])
         if a["requires_credentials"]:
-            flags.append("butuh-kredensial")
+            flags.append("kredensial-OK" if cred_ok.get(k) else "kredensial-BELUM")
+        if k in _KEYWORD_CAPABLE:
+            flags.append("keyword-OK")
+        elif k in _NEEDS_TARGET:
+            flags.append("butuh-URL")
         tag = f" [{', '.join(flags)}]" if flags else ""
         note = a["rate_note"] or a["legal_note"]
-        lines.append(f"- {a['key']}{tag}: {note[:70]}")
+        lines.append(f"- {k}{tag}: {note[:60]}")
     return "\n".join(lines)
 
 
@@ -94,11 +117,15 @@ def _node_select_sources(state: PlannerState) -> dict:
     usage = Usage(**state["usage"])
     system = (
         "Pilih sumber koleksi OSINT. WAJIB pilih HANYA dari daftar 'platform' berikut "
-        "(pakai kunci persis apa adanya). Utamakan tier free tanpa kredensial kecuali "
-        "diminta. Untuk news pakai query {keywords,timespan,fetch_full_text}; rss "
-        "{feeds,keywords}; youtube {video_ids}; reddit {subreddits,keywords}.\n\n"
+        "(pakai kunci persis apa adanya).\n"
+        "ATURAN untuk scan berbasis KEYWORD (tanpa URL target dari analis):\n"
+        "- Pilih HANYA sumber bertanda [keyword-OK]: rss, news, reddit, youtube.\n"
+        "- JANGAN pilih sumber [butuh-URL] (blog/website/forum/nitter) — tak ada target.\n"
+        "- JANGAN pilih sumber [kredensial-BELUM]; boleh pilih [kredensial-OK] (mis. youtube).\n"
+        "- Query tiap sumber cukup {keywords,timespan}. youtube & reddit JUGA pakai "
+        "{keywords} (bukan video_ids/subreddits). Tambah fetch_full_text:true untuk news.\n\n"
         f"PLATFORM TERSEDIA:\n{_source_catalog()}\n\n"
-        'Balas JSON: {"sources":[{"platform":"<kunci>","query":{...},"est_items":<int>}]}'
+        'Balas JSON: {"sources":[{"platform":"<kunci>","query":{"keywords":[...],"timespan":"90d"},"est_items":<int>}]}'
     )
     r = llm.call_json(
         "R",

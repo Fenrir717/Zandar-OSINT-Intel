@@ -48,8 +48,9 @@ class NewsAdapter(BaseAdapter):
             "mode": "artlist",
             "format": "json",
             "maxrecords": min(int(query.get("max_records", 250)), 250),
-            "timespan": query.get("timespan", "7d"),
+            "timespan": _gdelt_timespan(query.get("timespan", "1m")),
         }
+        articles: list = []
         try:
             resp = httpx.get(
                 GDELT_DOC, params=params, headers={"User-Agent": USER_AGENT}, timeout=60
@@ -57,6 +58,12 @@ class NewsAdapter(BaseAdapter):
             resp.raise_for_status()
             articles = resp.json().get("articles", [])
         except (httpx.HTTPError, ValueError):
+            articles = []
+
+        if not articles:
+            # GDELT tak terjangkau/kosong (mis. jaringan memblok) → fallback Google
+            # News RSS (gratis, keyword-searchable), agar 'news' tetap produktif.
+            yield from self._google_news_fallback(keywords)
             return
 
         fetch_full = query.get("fetch_full_text", True)
@@ -87,6 +94,44 @@ class NewsAdapter(BaseAdapter):
                 title=title,
                 raw=art,
             )
+
+    def _google_news_fallback(self, keywords: list[str]) -> Iterator[RawItem]:
+        """Feed Google News RSS dari keyword (dipakai bila GDELT gagal/kosong)."""
+        import feedparser
+
+        from workers.adapters.rss import USER_AGENT as RSS_UA
+        from workers.adapters.rss import google_news_feeds
+
+        feeds = google_news_feeds(keywords)
+        if not feeds:
+            return
+        try:
+            resp = httpx.get(feeds[0], headers={"User-Agent": RSS_UA}, timeout=30, follow_redirects=True)
+            resp.raise_for_status()
+        except httpx.HTTPError:
+            return
+        for entry in feedparser.parse(resp.content).entries:
+            title = (entry.get("title") or "").strip()
+            summary = entry.get("summary") or ""
+            text = f"{title}. {summary}".strip(". ")
+            ext = entry.get("id") or entry.get("link") or title
+            if not ext or not text:
+                continue
+            yield RawItem(
+                platform=self.platform, external_id=str(ext)[:255],
+                author=entry.get("author") or "Google News", content=text,
+                url=entry.get("link"), published_at=None, title=title, raw={},
+            )
+
+
+def _gdelt_timespan(ts: str) -> str:
+    """GDELT DOC menerima maks ~3 bulan; ubah 'Nd' besar → '3m' agar tak ditolak."""
+    import re
+
+    m = re.fullmatch(r"(\d+)d", str(ts).strip())
+    if m and int(m.group(1)) > 90:
+        return "3m"
+    return str(ts)
 
 
 def _parse_seendate(value: str | None) -> datetime | None:
