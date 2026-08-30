@@ -107,6 +107,22 @@ export interface AnalysisStats {
   intent: Record<string, number>; avg_sentiment: number | null;
   bot_suspect: number; sentiment_trend: { day: string; avg: number; count: number }[];
 }
+export interface ReportMeta {
+  id: string; title: string; status: string; classification: string;
+  created_at: string | null; generated_by_run: string | null;
+}
+export interface ReportCitation {
+  n: number; url: string | null; platform: string | null;
+  published_at: string | null; snippet: string | null;
+}
+export interface ReportDoc {
+  title: string; sections: { heading: string; body: string }[];
+  citations: ReportCitation[]; meta: Record<string, number>;
+}
+export interface ReportContent {
+  id: string; title: string; status: string; classification: string;
+  created_at: string | null; content: ReportDoc | null;
+}
 
 // ---- endpoint ----
 export const api = {
@@ -174,6 +190,12 @@ export const api = {
     req<{ task_id: string; status: string }>(`/investigations/${inv}/graph/build`, { method: "POST" }),
   runAnalysis: (inv: string) =>
     req<{ task_id: string; status: string }>(`/analysis/${inv}/run`, { method: "POST" }),
+  reports: (inv: string) => req<ReportMeta[]>(`/investigations/${inv}/reports`),
+  report: (id: string) => req<ReportContent>(`/reports/${id}`),
+  buildReport: (inv: string) =>
+    req<{ report_id: string; cited_sources: number; sections: number }>(
+      `/investigations/${inv}/reports/build`, { method: "POST" },
+    ),
 };
 
 // SSE agent-run live — pakai fetch streaming (bukan EventSource) agar bisa kirim

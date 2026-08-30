@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime
 
 from langgraph.types import Command
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.events import publish_agent_event
@@ -22,6 +22,7 @@ from core.models import (
     Investigation,
     Narrative,
     NarrativeAssessment,
+    Report,
     Source,
     narrative_evidence,
 )
@@ -272,6 +273,111 @@ async def run_analysis(
     }
 
 
+# ---------------------------------------------------------------- Graph D (report)
+
+async def run_report(session: AsyncSession, inv: Investigation) -> dict:
+    """Jalankan Graph D: narasi + bukti → laporan ber-sitasi → simpan (MinIO + Report).
+
+    Tiap build = snapshot Report baru (histori dipertahankan)."""
+    import asyncio as _asyncio
+
+    from graphs.report import reporter_graph
+    from workers.raw_lake import put_report
+
+    inv_pk = inv.id
+    inv_id = str(inv.id)
+
+    run = AgentRun(investigation_id=inv_pk, graph_name="report", status="running")
+    session.add(run)
+    await session.flush()
+    run_id = run.id
+
+    # Narasi teratas (berisiko) + bukti wakil (dengan URL sumber) dari Postgres.
+    nrows = (await session.execute(
+        select(Narrative.id, Narrative.label, Narrative.summary,
+               Narrative.risk_score, Narrative.risk_breakdown)
+        .where(Narrative.investigation_id == inv_pk)
+        .order_by(Narrative.risk_score.desc().nullslast())
+        .limit(12)
+    )).all()
+    nar_ids = [r[0] for r in nrows]
+    evidence_by_nar: dict = {nid: [] for nid in nar_ids}
+    if nar_ids:
+        erows = (await session.execute(
+            select(narrative_evidence.c.narrative_id, Comment.content, Comment.url,
+                   Comment.platform, Comment.published_at)
+            .join(Comment, Comment.id == narrative_evidence.c.comment_id)
+            .where(narrative_evidence.c.narrative_id.in_(nar_ids))
+            .order_by(Comment.published_at.desc().nullslast())
+        )).all()
+        for nid, content, url, platform, published_at in erows:
+            lst = evidence_by_nar.get(nid)
+            if lst is not None and len(lst) < 3:
+                lst.append({"content": content, "url": url, "platform": platform,
+                            "published_at": published_at.isoformat() if published_at else None})
+    narratives = [
+        {"label": r[1], "summary": r[2],
+         "risk_score": float(r[3]) if r[3] is not None else None,
+         "risk_breakdown": r[4] or {}, "evidence": evidence_by_nar.get(r[0], [])}
+        for r in nrows
+    ]
+
+    total = await session.scalar(
+        select(func.count()).select_from(Comment).where(Comment.investigation_id == inv_pk))
+    analyzed = await session.scalar(
+        select(func.count()).select_from(Analysis)
+        .join(Comment, Comment.id == Analysis.comment_id)
+        .where(Comment.investigation_id == inv_pk))
+    stats = {"total": total or 0, "analyzed": analyzed or 0,
+             "coverage": round((analyzed or 0) / total, 3) if total else 0}
+
+    await session.commit()  # tutup tx sebelum LLM (write_section bisa lama)
+
+    if not narratives:
+        run = await session.get(AgentRun, run_id)
+        run.status = "done"
+        run.ended_at = datetime.now(UTC)
+        await session.commit()
+        return {"agent_run_id": str(run_id), "report_id": None,
+                "note": "Belum ada narasi. Jalankan analisis (Graph C) dulu."}
+
+    title = f"Laporan Intelijen — {inv.title}"
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "report",
+        "status": "running", "node": "start", "detail": f"{len(narratives)} narasi",
+    })
+    graph = reporter_graph()
+    init = {"investigation_id": inv_id, "title": title, "narratives": narratives, "stats": stats}
+    result = await _asyncio.to_thread(graph.invoke, init, {})  # LONG (LLM), tanpa tx PG
+    doc = result.get("report", {})
+
+    report = Report(investigation_id=inv_pk, title=title, status="final", generated_by_run=run_id)
+    session.add(report)
+    await session.flush()
+    ref = await _asyncio.to_thread(put_report, inv_id, str(report.id), doc)
+    report.content_ref = ref
+
+    usage = result.get("usage", {})
+    run = await session.get(AgentRun, run_id)
+    run.tokens_in = usage.get("tokens_in", 0)
+    run.tokens_out = usage.get("tokens_out", 0)
+    run.status = "done"
+    run.ended_at = datetime.now(UTC)
+    await session.commit()
+
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "report",
+        "status": "done", "node": "done",
+        "detail": f"laporan · {doc.get('meta', {}).get('cited_sources', 0)} sitasi",
+        "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
+    })
+    return {
+        "agent_run_id": str(run_id), "report_id": str(report.id),
+        "cited_sources": doc.get("meta", {}).get("cited_sources", 0),
+        "sections": len(doc.get("sections", [])),
+    }
+
+
 def _parse_iso(v: str | None) -> datetime | None:
     if not v:
         return None
@@ -290,4 +396,4 @@ def reset_graph() -> None:
     n._graph = None
 
 
-__all__: list[str] = ["start_plan", "resume_plan", "run_analysis", "reset_graph"]
+__all__: list[str] = ["start_plan", "resume_plan", "run_analysis", "run_report", "reset_graph"]
