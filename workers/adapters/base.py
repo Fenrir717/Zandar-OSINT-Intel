@@ -49,7 +49,11 @@ class BaseAdapter(ABC):
     - mengembalikan external_id yang stabil (kunci idempotensi hilir).
     """
 
-    platform: str
+    platform: str  # label data (provenance) pada Comment.platform
+    # key = kunci registry (metode koleksi). Default = platform. Berbeda saat satu
+    # platform punya beberapa metode: mis. x (API resmi) vs x_vendor (shadow API) vs
+    # nitter — semuanya menghasilkan data platform="x" tapi lewat jalur berbeda.
+    key: str = ""
     tier: AccessTier = "free"
     requires_credentials: bool = False
     # Field config wajib ada isinya sebelum collect() boleh jalan
@@ -62,9 +66,14 @@ class BaseAdapter(ABC):
         self.config = config or {}
 
     @classmethod
+    def registry_key(cls) -> str:
+        return cls.key or cls.platform
+
+    @classmethod
     def describe(cls) -> dict:
         """Metadata untuk UI, planner, dan estimasi biaya."""
         return {
+            "key": cls.registry_key(),
             "platform": cls.platform,
             "tier": cls.tier,
             "requires_credentials": cls.requires_credentials,

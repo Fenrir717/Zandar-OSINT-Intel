@@ -42,6 +42,24 @@ metadata akses yang dibaca UI, planner, dan estimasi biaya — cek via
 [`web_extract.py`](workers/adapters/web_extract.py) — mereka berbeda hanya pada
 cara **menemukan** URL, bukan cara mengambil teks.
 
+### Metode koleksi alternatif (murah, tanpa akun tumbal/rotasi IP)
+
+Kunci registry = **metode** koleksi; bisa berbeda dari label data `platform`. Satu
+platform bisa punya beberapa jalur (mis. X: resmi vs vendor vs nitter).
+
+| Metode (key) | Platform data | Tier | Catatan |
+|---|---|---|---|
+| `x_vendor` | x | vendor | Shadow API komunitas (~$0,15-0,40/1k tweet). Vendor menanggung ToS; kita klien API. |
+| `har` | (per-config) | free | Parse file `.har` yang diekspor analis manual dari browser. Human-in-the-loop, menutup **Threads** tanpa API. |
+| `youtube_transcript` | youtube | free | Closed captions publik (tanpa kuota Data API) — isi video untuk analisis. |
+| `wayback` | wayback | free | Konten historis dari arsip Archive.org (artikel dihapus, evolusi narasi). |
+| `nitter` | x | free | Front-end publik X — **mayoritas instance mati sejak 2024**; butuh `base_url` hidup. |
+
+**Prinsip:** kita TIDAK menjalankan akun tumbal, rotasi token/IP, atau bypass
+bot-detection — itu mencemari cerita kepatuhan (§ UU PDP) dan membuat lalu lintas
+kita menyerupai CIB yang justru kita deteksi. Jalur murah = tier `vendor` + arsip
+publik + import manual, bukan scraping gerilya.
+
 ## Struktur
 
 ```

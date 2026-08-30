@@ -8,30 +8,41 @@ from workers.adapters.tiktok import TikTokAdapter
 from workers.adapters.x_twitter import XAdapter
 
 EXPECTED = {
+    # metode koleksi (kunci registry)
     "rss", "news", "blog", "website", "forum",
     "github", "youtube", "reddit", "telegram", "x", "tiktok",
+    "x_vendor", "har", "youtube_transcript", "wayback", "nitter",
 }
 
 
-def test_registry_covers_all_eleven_platforms() -> None:
+def test_registry_covers_all_methods() -> None:
     assert set(PLATFORMS) == EXPECTED
 
 
-def test_registry_keys_match_adapter_platform_attribute() -> None:
+def test_registry_key_matches_class() -> None:
     for key, cls in ADAPTERS.items():
-        assert cls.platform == key, f"{cls.__name__}.platform != kunci registry '{key}'"
+        assert cls.registry_key() == key, f"{cls.__name__}.registry_key() != '{key}'"
         assert issubclass(cls, BaseAdapter)
+        assert cls.platform, f"{cls.__name__} tanpa label platform"
+
+
+def test_alternate_methods_label_correct_platform() -> None:
+    # x_vendor & nitter mengumpulkan lewat metode berbeda tapi data tetap platform="x"
+    assert ADAPTERS["x_vendor"].platform == "x"
+    assert ADAPTERS["nitter"].platform == "x"
+    assert ADAPTERS["youtube_transcript"].platform == "youtube"
 
 
 def test_describe_all_reports_tiers() -> None:
-    described = {d["platform"]: d for d in describe_all()}
+    described = {d["key"]: d for d in describe_all()}
     assert described["x"]["tier"] == "metered"
     assert described["tiktok"]["tier"] == "vendor"
+    assert described["x_vendor"]["tier"] == "vendor"
     assert described["news"]["tier"] == "free"
     # Setiap sumber non-free wajib menjelaskan biayanya
     for meta in described.values():
         if meta["tier"] != "free":
-            assert meta["cost_note"], f"{meta['platform']} tier {meta['tier']} tanpa cost_note"
+            assert meta["cost_note"], f"{meta['key']} tier {meta['tier']} tanpa cost_note"
 
 
 def test_x_adapter_refuses_without_cost_confirmation() -> None:

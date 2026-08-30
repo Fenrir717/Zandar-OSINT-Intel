@@ -1,16 +1,16 @@
 """Registry adapter koleksi.
 
-Sebelas platform, tiga tier akses (PRD §5 + revisi 30 Agu 2026):
+Kunci registry = METODE koleksi (bisa berbeda dari label data `platform`): satu
+platform bisa punya beberapa metode. Mis. X: x (API resmi metered), x_vendor
+(shadow API murah), nitter (front-end) — ketiganya data platform="x".
 
-  free    — API resmi/terbuka, tanpa biaya per-item
-            rss · news · blog · website · forum · github · youtube · reddit · telegram
-  metered — resmi tapi dibayar per pemakaian, wajib guard biaya
-            x
-  vendor  — tidak ada akses resmi; hanya lewat penyedia data berkontrak
-            tiktok
+Tier akses (PRD §5 + revisi):
+  free    — API resmi/terbuka/arsip publik/parse lokal, tanpa biaya per-item
+  metered — resmi tapi dibayar per pemakaian (guard biaya)
+  vendor  — via penyedia data pihak ketiga berkontrak
 
-Adapter berbasis halaman web (news/blog/website, dan fallback rss) berbagi satu
-modul ekstraksi `web_extract` — mereka berbeda hanya pada cara MENEMUKAN URL.
+Adapter berbasis halaman web (news/blog/website/rss) berbagi web_extract; vendor
+(tiktok/x_vendor) berbagi vendor_base.
 """
 
 from workers.adapters.base import (
@@ -22,35 +22,34 @@ from workers.adapters.base import (
 from workers.adapters.blog import BlogAdapter
 from workers.adapters.forum import ForumAdapter
 from workers.adapters.github import GitHubAdapter
+from workers.adapters.har_import import HarImportAdapter
 from workers.adapters.news import NewsAdapter
+from workers.adapters.nitter import NitterAdapter
 from workers.adapters.reddit import RedditAdapter
 from workers.adapters.rss import RssAdapter
 from workers.adapters.telegram import TelegramAdapter
 from workers.adapters.tiktok import TikTokAdapter
+from workers.adapters.wayback import WaybackAdapter
 from workers.adapters.website import WebsiteAdapter
 from workers.adapters.x_twitter import XAdapter
+from workers.adapters.x_vendor import XVendorAdapter
 from workers.adapters.youtube import YouTubeAdapter
+from workers.adapters.youtube_transcript import YouTubeTranscriptAdapter
 
-ADAPTERS: dict[str, type[BaseAdapter]] = {
-    "rss": RssAdapter,
-    "news": NewsAdapter,
-    "blog": BlogAdapter,
-    "website": WebsiteAdapter,
-    "forum": ForumAdapter,
-    "github": GitHubAdapter,
-    "youtube": YouTubeAdapter,
-    "reddit": RedditAdapter,
-    "telegram": TelegramAdapter,
-    "x": XAdapter,
-    "tiktok": TikTokAdapter,
-}
+_CLASSES: list[type[BaseAdapter]] = [
+    RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, ForumAdapter, GitHubAdapter,
+    YouTubeAdapter, RedditAdapter, TelegramAdapter, XAdapter, TikTokAdapter,
+    # metode koleksi tambahan (revisi 30 Agu 2026)
+    XVendorAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
+]
 
+ADAPTERS: dict[str, type[BaseAdapter]] = {cls.registry_key(): cls for cls in _CLASSES}
 PLATFORMS = tuple(ADAPTERS)
 
 
 def describe_all() -> list[dict]:
     """Metadata seluruh adapter — dipakai UI Sources dan Graph A `select_sources`."""
-    return [cls.describe() for cls in ADAPTERS.values()]
+    return [cls.describe() for cls in _CLASSES]
 
 
 __all__ = [
