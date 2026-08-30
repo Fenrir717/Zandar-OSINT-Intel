@@ -32,8 +32,15 @@ _BASE = {"pos": 0.7, "neg": -0.7, "neu": 0.0}
 def refine_low_confidence(
     texts: list[str], labels: list[Label], threshold: float = _THRESHOLD
 ) -> list[Label]:
-    """Nilai ulang item low-confidence via LLM (per-item); mutasikan & kembalikan `labels`."""
-    idxs = [i for i, lab in enumerate(labels) if (lab.confidence or 0.0) < threshold][:_MAX_REFINE]
+    """Nilai ulang item low-confidence via LLM (per-item); mutasikan & kembalikan `labels`.
+
+    Gate: hanya item low-confidence yang bersentimen POS/NEG. Sarkasme membalik
+    permukaan pos↔neg; item NETRAL low-confidence jarang sarkastis — dilewati agar
+    hemat panggilan LLM & fokus ke tempat yang berdampak."""
+    idxs = [
+        i for i, lab in enumerate(labels)
+        if (lab.confidence or 0.0) < threshold and lab.sentiment in ("pos", "neg")
+    ][:_MAX_REFINE]
     if not idxs:
         return labels
 
