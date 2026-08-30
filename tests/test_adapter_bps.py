@@ -7,9 +7,15 @@ from workers.adapters.base import AdapterNotConfigured
 from workers.adapters.bps import BPSAdapter, _items
 
 
-def test_bps_requires_token() -> None:
+def test_bps_requires_token(monkeypatch) -> None:
+    # Isolasi dari .env (mesin dev bisa punya BPS_TOKEN terisi)
+    from core.config import get_settings
+
+    monkeypatch.setenv("BPS_TOKEN", "")
+    get_settings.cache_clear()
     with pytest.raises(AdapterNotConfigured):
         list(BPSAdapter().collect({"domain": "0000"}))
+    get_settings.cache_clear()
 
 
 def test_items_unwraps_meta_wrapper() -> None:
