@@ -57,6 +57,7 @@ export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => vo
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         {note && <span style={{ fontSize: 12, color: note.startsWith("Gagal") || note.startsWith("Bangun") ? "var(--crit)" : "var(--muted)", marginRight: "auto" }}>{note}</span>}
         {!note && <span style={{ marginRight: "auto" }} />}
+        <Button variant="ghost" icon="download" onClick={() => window.print()} disabled={!active?.content}>Ekspor PDF</Button>
         <Button variant="ghost" icon="refresh" onClick={() => selected && loadList(selected)}>Segarkan</Button>
         <Button icon="reports" onClick={build} disabled={!selected || building}>
           {building ? "Menyusun…" : "Bangun Laporan"}
@@ -96,7 +97,7 @@ export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => vo
             ))}
           </Card>
 
-          <Card className="rise rise-2" style={{ padding: 20 }}>
+          <Card className="rise rise-2 report-print" style={{ padding: 20 }}>
             {active?.content ? <ReportView doc={active.content} meta={active} />
               : <div style={{ display: "grid", placeItems: "center", padding: 40 }}><Spinner size={24} /></div>}
           </Card>

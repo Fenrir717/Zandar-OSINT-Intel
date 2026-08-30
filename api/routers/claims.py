@@ -11,12 +11,20 @@ Verdict berstatus DRAFT — penilaian AI, menunggu tinjauan analis.
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import CurrentUser, DbSession
 from core.models import AuditLog, Claim, ClaimVerdict, Investigation, Narrative
 
 router = APIRouter(tags=["claims"])
+
+_VERDICTS = ("supported", "refuted", "insufficient", "conflicting")
+
+
+class ClaimReview(BaseModel):
+    review_status: str = "reviewed"     # draft|reviewed
+    verdict: str | None = None          # koreksi analis (opsional)
 
 
 @router.post(
@@ -39,6 +47,31 @@ async def verify_claims(
     if result.get("claims", 0) == 0 and result.get("note"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, result["note"])
     return result
+
+
+@router.post("/claims/{claim_id}/review")
+async def review_claim(
+    claim_id: uuid.UUID, body: ClaimReview, session: DbSession, user: CurrentUser
+) -> dict:
+    """Tinjauan analis: tandai verdict draft → reviewed (opsional koreksi verdict)."""
+    if body.review_status not in ("draft", "reviewed"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "review_status tidak valid")
+    row = (await session.execute(
+        select(ClaimVerdict)
+        .where(ClaimVerdict.claim_id == claim_id)
+        .order_by(ClaimVerdict.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Verdict klaim tidak ditemukan")
+    row.review_status = body.review_status
+    if body.verdict is not None:
+        if body.verdict not in _VERDICTS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "verdict tidak valid")
+        row.verdict = body.verdict
+    session.add(AuditLog(user_id=user.id, action="claim.review", resource=f"claim:{claim_id}"))
+    await session.commit()
+    return {"claim_id": str(claim_id), "review_status": row.review_status, "verdict": row.verdict}
 
 
 @router.get("/investigations/{investigation_id}/claims")

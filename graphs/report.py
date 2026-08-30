@@ -32,12 +32,30 @@ _MAX_EV_PER_NAR = 3    # bukti wakil per narasi untuk konteks LLM
 _CITE = re.compile(r"\[(\d+)\]")
 
 _SECTION_SYSTEM = (
-    "Anda analis intelijen OSINT menulis LAPORAN resmi. WAJIB Bahasa Indonesia, "
-    "nada objektif dan ringkas. Anda diberi DAFTAR SUMBER bernomor. Tulis bagian "
-    "yang diminta (1-3 paragraf) dan DUKUNG tiap klaim penting dengan sitasi [n] "
-    "yang mengacu ke nomor sumber tersebut. JANGAN mengarang sumber di luar daftar. "
-    "JANGAN memakai nomor sumber yang tidak ada. Balas HANYA JSON {\"body\": \"...\"}."
+    "Anda analis intelijen menulis LAPORAN untuk PIMPINAN non-teknis. WAJIB Bahasa "
+    "Indonesia yang JELAS dan MENGALIR. Tulis bagian yang diminta (1-3 paragraf).\n"
+    "GAYA (WAJIB):\n"
+    "- Bahasa lugas untuk pembaca awam. Hindari jargon; bila terpaksa memakai istilah "
+    "teknis, jelaskan singkat dengan kata biasa.\n"
+    "- JANGAN menyebut angka desimal atau skor mentah (mis. 0,5476 atau 'otentisitas "
+    "0,69'). Terjemahkan ke kata: tinggi / sedang / rendah.\n"
+    "- Fokus pada MAKNA dan implikasi bagi pengambil keputusan, bukan pada metrik.\n"
+    "- Kalimat efektif; hindari pengulangan dan boilerplate.\n"
+    "SITASI: dukung klaim penting dengan [n] dari DAFTAR SUMBER. JANGAN mengarang "
+    "sumber atau memakai nomor yang tidak ada.\n"
+    "Balas HANYA JSON {\"body\": \"...\"}."
 )
+
+
+def _band(x: float | None) -> str:
+    """Desimal → kata kualitatif (agar laporan tidak berisi skor mentah)."""
+    if x is None:
+        return "tidak diketahui"
+    if x >= 0.66:
+        return "tinggi"
+    if x >= 0.4:
+        return "sedang"
+    return "rendah"
 
 # Kerangka bagian tetap (id, judul, instruksi penulisan).
 _OUTLINE: list[dict[str, str]] = [
@@ -103,13 +121,16 @@ def _sources_block(sources: list[dict]) -> str:
 
 
 def _narratives_block(nars: list[dict]) -> str:
+    """Deskripsi narasi dalam KATA (bukan desimal) agar LLM tidak memparafrase skor."""
     lines = []
     for i, n in enumerate(nars, 1):
         rb = n.get("risk_breakdown") or {}
         lines.append(
-            f"{i}. {n.get('label')} — risiko {n.get('risk_score')}; "
-            f"otentisitas {rb.get('authenticity')}, aktor {rb.get('actors')}, "
-            f"konten {rb.get('content')}, sebaran {rb.get('distribution')}. "
+            f"{i}. {n.get('label')} — tingkat risiko {_band(n.get('risk_score'))}; "
+            f"indikasi koordinasi {_band(rb.get('authenticity'))}, "
+            f"dominasi segelintir aktor {_band(rb.get('actors'))}, "
+            f"muatan negatif/toksik {_band(rb.get('content'))}, "
+            f"sebaran lintas kanal {_band(rb.get('distribution'))}. "
             f"{n.get('summary') or ''}"
         )
     return "\n".join(lines)
@@ -120,23 +141,23 @@ def _fallback_body(section_id: str, nars: list[dict], stats: dict) -> str:
     if section_id == "ringkasan":
         n = len(nars)
         hi = sum(1 for x in nars if (x.get("risk_score") or 0) >= 0.5)
-        cov = stats.get("coverage")
+        cov = round((stats.get("coverage") or 0) * 100)
         return (
-            f"Investigasi mengidentifikasi {n} narasi menonjol, {hi} di antaranya "
-            f"berisiko tinggi (skor ≥ 0,5). Cakupan analisis "
-            f"{round((cov or 0) * 100)}% komentar terklasifikasi. Rincian dan bukti "
-            "pendukung diuraikan pada bagian berikut."
+            f"Investigasi menemukan {n} narasi menonjol di ruang publik, "
+            f"{hi} di antaranya tergolong berisiko tinggi. Analisis menjangkau "
+            f"sekitar {cov}% komentar yang terkumpul. Rincian tiap narasi dan bukti "
+            "pendukungnya diuraikan pada bagian berikut."
         )
     if section_id == "narasi":
-        parts = [f"- {n.get('label')} (risiko {n.get('risk_score')}): {n.get('summary') or ''}"
+        parts = [f"- {n.get('label')} (risiko {_band(n.get('risk_score'))}): {n.get('summary') or ''}"
                  for n in nars[:6]]
-        return "Narasi paling berisiko:\n" + "\n".join(parts)
+        return "Narasi paling menonjol:\n" + "\n".join(parts)
     if section_id == "koordinasi":
         coord = [n for n in nars if ((n.get('risk_breakdown') or {}).get('authenticity') or 0) >= 0.6]
         return (
-            f"{len(coord)} narasi menunjukkan indikasi koordinasi (otentisitas ≥ 0,6): "
-            "konsentrasi aktor dan/atau kekompakan pesan yang tinggi. Perlu telaah "
-            "lanjut untuk memastikan perilaku tak-otentik terkoordinasi."
+            f"Sebanyak {len(coord)} narasi menunjukkan indikasi koordinasi yang menonjol: "
+            "pesan didorong segelintir akun dan/atau memakai kalimat yang sangat mirip. "
+            "Perlu telaah lanjut untuk memastikan apakah ini gerakan terkoordinasi."
         )
     return (
         "Direkomendasikan pemantauan berkelanjutan atas narasi berisiko tinggi, "

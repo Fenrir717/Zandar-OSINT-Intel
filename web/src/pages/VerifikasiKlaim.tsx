@@ -102,9 +102,25 @@ export function VerifikasiKlaim({ headerSlot }: { headerSlot: (n: React.ReactNod
 }
 
 function ClaimCard({ c, delay }: { c: ClaimVerdict; delay: number }) {
-  const v = c.verdict ? (VERDICT[c.verdict] ?? { label: c.verdict, tone: "muted" as Tone }) : null;
+  const [verdict, setVerdict] = useState(c.verdict || "insufficient");
+  const [status, setStatus] = useState(c.review_status || "draft");
+  const [busy, setBusy] = useState(false);
+  const reviewed = status === "reviewed";
+  const v = VERDICT[verdict] ?? { label: verdict, tone: "muted" as Tone };
+
+  async function review(next: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await api.reviewClaim(c.id, { review_status: next, verdict });
+      setStatus(r.review_status);
+      if (r.verdict) setVerdict(r.verdict);
+    } catch { /* biarkan; UI tetap */ }
+    finally { setBusy(false); }
+  }
+
   return (
-    <Card className={`rise rise-${delay}`} style={{ padding: 16 }}>
+    <Card className={`rise rise-${delay}`} style={{ padding: 16, borderColor: reviewed ? "var(--ok)" : undefined }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 320px", minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>{c.claim}</div>
@@ -115,8 +131,8 @@ function ClaimCard({ c, delay }: { c: ClaimVerdict; delay: number }) {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {v && <Pill tone={v.tone} dot>{v.label}</Pill>}
-          {c.review_status === "draft" && <Pill tone="warn">draf</Pill>}
+          <Pill tone={v.tone} dot>{v.label}</Pill>
+          {reviewed ? <Pill tone="ok">✓ ditinjau</Pill> : <Pill tone="warn">draf</Pill>}
         </div>
       </div>
 
@@ -152,6 +168,21 @@ function ClaimCard({ c, delay }: { c: ClaimVerdict; delay: number }) {
           ))}
         </div>
       )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line-2)", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: "var(--faint)" }}>Tinjauan analis:</span>
+        <select className="select" value={verdict} onChange={(e) => setVerdict(e.target.value)} disabled={busy || reviewed}
+          style={{ width: "auto", fontSize: 12, padding: "5px 8px" }}>
+          {Object.entries(VERDICT).map(([k, val]) => <option key={k} value={k}>{val.label}</option>)}
+        </select>
+        {reviewed ? (
+          <Button variant="ghost" onClick={() => review("draft")} disabled={busy}>Buka lagi</Button>
+        ) : (
+          <Button icon="reports" onClick={() => review("reviewed")} disabled={busy}>
+            {busy ? "Menyimpan…" : "Tandai ditinjau"}
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

@@ -210,6 +210,14 @@ export const api = {
     req<{ claims: number; with_authoritative: number }>(
       `/investigations/${inv}/claims/verify`, { method: "POST" },
     ),
+  reviewClaim: (claimId: string, body: { review_status: string; verdict?: string }) =>
+    req<{ claim_id: string; review_status: string; verdict: string | null }>(
+      `/claims/${claimId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
 };
 
 // SSE agent-run live — pakai fetch streaming (bukan EventSource) agar bisa kirim

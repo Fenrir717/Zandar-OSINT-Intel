@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { TooltipProps } from "recharts";
 import {
-  Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
+  Cell, ReferenceArea, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
 import { api, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
@@ -76,6 +76,8 @@ export function ForensikNarasi({ headerSlot }: { headerSlot: (n: React.ReactNode
         <Empty icon="graph">Belum ada narasi. Bangun narasi via Agent Monitor (Jalankan analisis) dulu.</Empty>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <QuadrantChart nars={nars} />
+
           <Card className="rise" style={{ padding: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
               <span style={{ color: "var(--accent)" }}><Icon name="graph" size={16} /></span>Peta Koordinasi × Risiko
@@ -102,7 +104,7 @@ export function ForensikNarasi({ headerSlot }: { headerSlot: (n: React.ReactNode
               </>
             )}
             <div style={{ fontSize: 11, color: "var(--faint)", marginTop: 10, borderTop: "1px solid var(--line-2)", paddingTop: 10 }}>
-              Sumbu Kebenaran (veracity) &amp; kuadran final Otentisitas×Kebenaran → Fase 5 (verifikasi klaim).
+              Sumbu Otentisitas×Kebenaran ada di kartu <b>Kuadran</b> di atas — jalankan <b>Verifikasi Klaim</b> untuk mengisinya.
             </div>
           </Card>
 
@@ -122,6 +124,86 @@ function ScatterTip({ active, payload }: TooltipProps<number, string>) {
       <div>Otentisitas: <b className="tnum">{d.x.toFixed(2)}</b></div>
       <div>Risiko: <b className="tnum">{d.y.toFixed(2)}</b></div>
       <div style={{ color: "var(--muted)" }}>{d.z} bukti</div>
+    </div>
+  );
+}
+
+type Quad = "healthy" | "agenda" | "rumor" | "operation";
+const QUAD: Record<Quad, { label: string; color: string }> = {
+  healthy: { label: "Sehat · organik + benar", color: "var(--ok)" },
+  agenda: { label: "Agenda · terkoordinasi + benar", color: "var(--info)" },
+  rumor: { label: "Rumor · organik + salah", color: "var(--warn)" },
+  operation: { label: "Operasi · terkoordinasi + salah", color: "var(--crit)" },
+};
+function quadOf(x: number, y: number): Quad {
+  const coord = x >= 0.5, tru = y >= 0.5;
+  return !coord && tru ? "healthy" : !coord && !tru ? "rumor" : coord && tru ? "agenda" : "operation";
+}
+interface QuadPoint { x: number; y: number; z: number; label: string; q: Quad }
+
+function QuadrantChart({ nars }: { nars: Narrative[] }) {
+  const pts: QuadPoint[] = nars
+    .filter((n) => n.assessment?.authenticity != null && n.assessment?.veracity != null)
+    .map((n) => {
+      const x = n.assessment!.authenticity as number;
+      const y = n.assessment!.veracity as number;
+      return { x, y, z: n.evidence_count, label: n.label, q: (n.assessment!.quadrant as Quad) || quadOf(x, y) };
+    });
+  return (
+    <Card className="rise" style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="target" size={16} /></span>Kuadran Otentisitas × Kebenaran
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>{pts.length} narasi terverifikasi</span>
+      </div>
+      {pts.length === 0 ? (
+        <div style={{ height: 200, display: "grid", placeItems: "center", textAlign: "center", color: "var(--faint)", fontSize: 12.5, padding: "0 24px" }}>
+          Sumbu Kebenaran belum terisi. Buka halaman <b style={{ color: "var(--muted)" }}>Verifikasi Klaim</b> lalu jalankan verifikasi untuk menempatkan narasi ke kuadran.
+        </div>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={320}>
+            <ScatterChart margin={{ top: 10, right: 16, left: -6, bottom: 4 }}>
+              <ReferenceArea x1={0} x2={0.5} y1={0.5} y2={1} fill="var(--ok)" fillOpacity={0.05} />
+              <ReferenceArea x1={0.5} x2={1} y1={0.5} y2={1} fill="var(--info)" fillOpacity={0.05} />
+              <ReferenceArea x1={0} x2={0.5} y1={0} y2={0.5} fill="var(--warn)" fillOpacity={0.05} />
+              <ReferenceArea x1={0.5} x2={1} y1={0} y2={0.5} fill="var(--crit)" fillOpacity={0.06} />
+              <XAxis type="number" dataKey="x" domain={[0, 1]} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
+              <YAxis type="number" dataKey="y" domain={[0, 1]} tick={{ fill: "var(--muted)", fontSize: 10 }} tickLine={false} axisLine={false} />
+              <ZAxis type="number" dataKey="z" range={[60, 300]} />
+              <ReferenceLine x={0.5} stroke="var(--line)" strokeDasharray="4 4" />
+              <ReferenceLine y={0.5} stroke="var(--line)" strokeDasharray="4 4" />
+              <Tooltip cursor={{ strokeDasharray: "3 3", stroke: "var(--line)" }} content={QuadTip} />
+              <Scatter data={pts} isAnimationActive={false}>
+                {pts.map((d, i) => <Cell key={i} fill={QUAD[d.q].color} />)}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--faint)", marginTop: 2 }}>
+            <span>← Organik</span><span>Otentisitas</span><span>Terkoordinasi →</span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", marginTop: 10, borderTop: "1px solid var(--line-2)", paddingTop: 10 }}>
+            {(Object.keys(QUAD) as Quad[]).map((k) => (
+              <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--muted)" }}>
+                <span style={{ width: 9, height: 9, borderRadius: 3, background: QUAD[k].color }} />{QUAD[k].label}
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 6 }}>Sumbu tegak: Kebenaran (bawah salah · atas benar). Verdict = penilaian AI draf.</div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function QuadTip({ active, payload }: TooltipProps<number, string>) {
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload as QuadPoint;
+  return (
+    <div style={{ ...tip, padding: "8px 11px" }}>
+      <div style={{ fontWeight: 700, marginBottom: 4, maxWidth: 220, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.label}</div>
+      <div>Otentisitas: <b className="tnum">{d.x.toFixed(2)}</b></div>
+      <div>Kebenaran: <b className="tnum">{d.y.toFixed(2)}</b></div>
+      <div style={{ color: QUAD[d.q].color, fontWeight: 600, marginTop: 2 }}>{QUAD[d.q].label}</div>
     </div>
   );
 }
