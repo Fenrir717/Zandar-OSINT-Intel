@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     cerebras_api_key: str = ""
 
+    # Embedding (Fase 2) — stub (default, tanpa key) | gemini (gratis, token-based) | local
+    embed_provider: str = "stub"
+    embed_model: str = ""  # kosong = default per provider
+    qdrant_collection: str = "comments_v1"
+
     langfuse_host: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

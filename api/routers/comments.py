@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -22,6 +22,10 @@ class CommentOut(BaseModel):
     published_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class CommentHit(CommentOut):
+    score: float
 
 
 @router.get("/search", response_model=list[CommentOut])
@@ -51,6 +55,52 @@ async def search_comments(
         stmt = stmt.where(Comment.lang == lang)
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.post("/{investigation_id}/index", status_code=status.HTTP_202_ACCEPTED)
+async def index_comments(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> dict:
+    """Picu embedding + indeks Qdrant untuk pencarian semantik."""
+    from workers.tasks import embed_investigation
+
+    task = embed_investigation.delay(str(investigation_id))
+    return {"task_id": task.id, "status": "queued"}
+
+
+@router.get("/semantic", response_model=list[CommentHit])
+async def semantic_search(
+    session: DbSession,
+    user: CurrentUser,
+    investigation_id: uuid.UUID,
+    q: str,
+    limit: int = 30,
+    platform: str | None = None,
+    lang: str | None = None,
+) -> list[CommentHit]:
+    """Pencarian semantik: embed query → Qdrant → join isi komentar dari PG."""
+    from workers.embed import get_embedder
+    from workers.vectorstore import search
+
+    vec = get_embedder().embed([q])[0]
+    hits = search(vec, str(investigation_id), limit=limit, platform=platform, lang=lang)
+    if not hits:
+        return []
+    ids = [uuid.UUID(h["comment_id"]) for h in hits]
+    score_by_id = {h["comment_id"]: h["score"] for h in hits}
+    result = await session.execute(select(Comment).where(Comment.id.in_(ids)))
+    by_id = {str(c.id): c for c in result.scalars().all()}
+    out: list[CommentHit] = []
+    for cid in [str(i) for i in ids]:
+        c = by_id.get(cid)
+        if c is None:
+            continue
+        out.append(CommentHit(
+            id=c.id, investigation_id=c.investigation_id, platform=c.platform,
+            author_hash=c.author_hash, content=c.content, lang=c.lang, url=c.url,
+            published_at=c.published_at, score=round(score_by_id[cid], 4),
+        ))
+    return out
 
 
 @router.get("/stats")

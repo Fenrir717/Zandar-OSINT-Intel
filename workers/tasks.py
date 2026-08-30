@@ -167,6 +167,40 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
     return {"investigation_id": investigation_id, "analyzed": analyzed, "model": clf.version}
 
 
+@celery_app.task(bind=True)
+def embed_investigation(self, investigation_id: str, batch_size: int = 100) -> dict:
+    """Embed komentar investigasi → indeks Qdrant (pencarian semantik)."""
+    return asyncio.run(_embed(investigation_id, batch_size))
+
+
+async def _embed(investigation_id: str, batch_size: int) -> dict:
+    from workers.embed import get_embedder
+    from workers.vectorstore import ensure_collection, upsert
+
+    emb = get_embedder()
+    ensure_collection(emb.dim)
+    indexed = 0
+    async with SessionLocal() as session:
+        result = await session.execute(
+            select(Comment.id, Comment.content, Comment.platform, Comment.lang, Comment.published_at)
+            .where(Comment.investigation_id == uuid.UUID(investigation_id))
+        )
+        rows = result.all()
+    for i in range(0, len(rows), batch_size):
+        chunk = rows[i : i + batch_size]
+        vectors = emb.embed([r[1] for r in chunk])
+        payloads = [
+            {
+                "comment_id": str(r[0]), "investigation_id": investigation_id,
+                "platform": r[2], "lang": r[3],
+                "published_at": r[4].isoformat() if r[4] else None,
+            }
+            for r in chunk
+        ]
+        indexed += upsert(vectors, payloads)
+    return {"investigation_id": investigation_id, "indexed": indexed, "model": emb.version, "dim": emb.dim}
+
+
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:
     """True bila tick cron terakhir (<= now) belum tercakup last_run_at.
 
