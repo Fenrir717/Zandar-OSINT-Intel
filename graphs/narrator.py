@@ -29,7 +29,17 @@ from graphs.llm import Usage, get_llm
 # --- kalibrasi (tunable; default disetel untuk multilingual-e5-small) ----------
 _COH_FLOOR = 0.75   # cos-sim baseline e5 untuk teks ID acak → dipetakan ke 0
 _BURST_HORIZON_H = 24.0  # sebaran waktu cluster <= jam ini dianggap "burst" penuh
-_REP_K = 3          # jumlah komentar wakil yang dikirim ke LLM pelabelan
+_REP_K = 5            # jumlah komentar wakil yang dikirim ke LLM pelabelan
+_MAX_LLM_LABELS = 25  # cap panggilan LLM/run: cluster terbesar via LLM, ekor → ekstraktif
+
+_LABEL_SYSTEM = (
+    "Anda analis OSINT. Diberi beberapa komentar/berita berpesan serupa, rumuskan "
+    "NARASI intinya. WAJIB berbahasa Indonesia. Balas HANYA JSON {label, summary}:\n"
+    "- label: frasa ringkas (<=8 kata) yang menangkap KLAIM atau SUDUT PANDANG "
+    "narasi (bukan topik umum). Bahasa Indonesia, huruf normal.\n"
+    "- summary: satu kalimat Bahasa Indonesia yang netral merangkum pesan kelompok ini.\n"
+    "ABAIKAN nama media/outlet, tanggal, byline, dan boilerplate — fokus ke isi pesan."
+)
 
 
 class NarratorState(TypedDict, total=False):
@@ -53,27 +63,43 @@ def _node_cluster(state: NarratorState) -> dict:
     return {"clusters": clusters}
 
 
+def _fallback_label(texts: list[str]) -> str:
+    """Label ekstraktif (kata paling sering) bila LLM gagal/format aneh."""
+    from graphs.llm import _STOP, _WORD
+
+    freq: dict[str, int] = {}
+    for t in texts:
+        for w in _WORD.findall(t.lower()):
+            if w not in _STOP and len(w) > 3:
+                freq[w] = freq.get(w, 0) + 1
+    top = sorted(freq, key=lambda w: (-freq[w], w))[:4]
+    return " ".join(top).title() if top else (texts[0][:40] if texts else "Narasi")
+
+
 def _node_label(state: NarratorState) -> dict:
     llm = get_llm()
     usage = Usage(**state.get("usage", {}))
     items = state["items"]
     narratives: list[dict] = []
-    for idxs in state["clusters"]:
+    # clusters sudah terurut besar→kecil; label LLM untuk yang terbesar, ekor ekstraktif
+    for rank, idxs in enumerate(state["clusters"]):
         vecs = [items[i]["vector"] for i in idxs]
         rep = [items[idxs[j]]["content"] for j in most_representative(vecs, _REP_K)]
-        r = llm.call_json(
-            "F",
-            "Beri label ringkas (<=8 kata) dan ringkasan 1 kalimat untuk kelompok "
-            "komentar dengan pesan serupa. Balas JSON {label, summary}.",
-            "Komentar:\n- " + "\n- ".join(t[:200] for t in rep),
-            hint={"node": "label_narrative", "texts": rep},
-        )
-        usage.add(r)
-        narratives.append({
-            "member_idx": idxs,
-            "label": str(r.data.get("label") or "Narasi")[:255],
-            "summary": (r.data.get("summary") or None),
-        })
+        summary = None
+        if rank < _MAX_LLM_LABELS:
+            r = llm.call_json(
+                "F",
+                _LABEL_SYSTEM,
+                "Komentar dalam kelompok:\n- " + "\n- ".join(t[:220] for t in rep),
+                hint={"node": "label_narrative", "texts": rep},
+            )
+            usage.add(r)
+            data = r.data if isinstance(r.data, dict) else {}
+            label = str(data.get("label") or "").strip() or _fallback_label(rep)
+            summary = data.get("summary") or None
+        else:
+            label = _fallback_label(rep)
+        narratives.append({"member_idx": idxs, "label": label[:255], "summary": summary})
     return {"narratives": narratives, "usage": usage.__dict__}
 
 

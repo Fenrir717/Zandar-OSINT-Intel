@@ -158,23 +158,34 @@ class OpenAICompatProvider(LLMProvider):
         self.model_f = s.llm_model_f or default_f
 
     def call_json(self, tier: Tier, system: str, user: str, hint: dict | None = None) -> LLMResult:
+        import time
+
         import httpx
 
         model = self.model_r if tier == "R" else self.model_f
-        resp = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.key}"},
-            json={
-                "model": model,
-                "temperature": 0,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": system + "\nBalas HANYA JSON valid, tanpa teks lain."},
-                    {"role": "user", "content": user},
-                ],
-            },
-            timeout=60,
-        )
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system + "\nBalas HANYA JSON valid, tanpa teks lain."},
+                {"role": "user", "content": user},
+            ],
+        }
+        delay = 2.0
+        resp = None
+        for _attempt in range(5):
+            resp = httpx.post(
+                f"{self.base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self.key}"},
+                json=payload, timeout=60,
+            )
+            if resp.status_code in (429, 500, 502, 503):  # rate limit / transient → backoff
+                time.sleep(delay)
+                delay = min(delay * 2, 20)
+                continue
+            break
+        assert resp is not None
         resp.raise_for_status()
         body = resp.json()
         content = body["choices"][0]["message"]["content"]
@@ -188,10 +199,17 @@ class OpenAICompatProvider(LLMProvider):
 
 def _extract_json(text: str) -> dict:
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         m = re.search(r"\{.*\}", text or "", re.DOTALL)
-        return json.loads(m.group(0)) if m else {}
+        parsed = json.loads(m.group(0)) if m else {}
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):  # LLM kadang balas [{...}] — ambil dict pertama
+        for el in parsed:
+            if isinstance(el, dict):
+                return el
+    return {}
 
 
 _instance: LLMProvider | None = None

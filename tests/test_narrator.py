@@ -92,3 +92,19 @@ def test_label_present() -> None:
 def test_min_size_one_keeps_singleton() -> None:
     nars = _run(min_size=1)["narratives"]
     assert len(nars) == 3  # termasuk singleton
+
+
+def test_extract_json_salvages_list() -> None:
+    # gpt-oss kadang balas [{...}] alih-alih {...} — harus diselamatkan, bukan crash
+    from graphs.llm import _extract_json
+
+    assert _extract_json('[{"label": "X", "summary": "y"}]') == {"label": "X", "summary": "y"}
+    assert _extract_json('["a", "b"]') == {}      # list tanpa dict → kosong
+    assert _extract_json("bukan json") == {}
+
+
+def test_fallback_label_from_keywords() -> None:
+    from graphs.narrator import _fallback_label
+
+    lab = _fallback_label(["harga beras naik terus", "beras makin mahal harga"])
+    assert "Beras" in lab or "Harga" in lab  # kata dominan jadi label

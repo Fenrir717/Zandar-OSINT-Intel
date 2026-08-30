@@ -140,13 +140,13 @@ async def run_analysis(
     from graphs.narrator import narrator_graph
     from workers.vectorstore import fetch_vectors
 
-    run = AgentRun(investigation_id=inv.id, graph_name="analysis", status="running")
+    inv_pk = inv.id
+    inv_id = str(inv.id)
+
+    run = AgentRun(investigation_id=inv_pk, graph_name="analysis", status="running")
     session.add(run)
     await session.flush()
-    run_id = str(run.id)
-
-    inv_id = str(inv.id)
-    vectors = await _asyncio.to_thread(fetch_vectors, inv_id)
+    run_id = run.id
 
     # Meta komentar + analisis (untuk skoring risiko) dari Postgres
     res = await session.execute(
@@ -155,10 +155,14 @@ async def run_analysis(
             Comment.content, Analysis.toxicity, Analysis.sentiment,
         )
         .outerjoin(Analysis, Analysis.comment_id == Comment.id)
-        .where(Comment.investigation_id == inv.id)
+        .where(Comment.investigation_id == inv_pk)
     )
     rows = res.all()
+    # PENTING: tutup transaksi baca SEBELUM graph (47 LLM call bisa >60s → jangan
+    # biarkan tx menganga; idle_in_transaction_session_timeout akan memutus koneksi).
+    await session.commit()
 
+    vectors = await _asyncio.to_thread(fetch_vectors, inv_id)  # Qdrant, tanpa tx PG
     # Gabung: hanya komentar yang punya vektor (sudah di-embed). Urut stabil.
     items = [
         {
@@ -172,20 +176,21 @@ async def run_analysis(
     items.sort(key=lambda it: (it["published_at"] or "", it["comment_id"]))
 
     if not items:
+        run = await session.get(AgentRun, run_id)
         run.status = "done"
         run.ended_at = datetime.now(UTC)
         await session.commit()
-        return {"agent_run_id": run_id, "embedded": 0, "narratives": 0,
+        return {"agent_run_id": str(run_id), "embedded": 0, "narratives": 0,
                 "note": "Belum ada komentar ter-embed. Jalankan indexing dulu."}
 
     graph = narrator_graph()
     result = await _asyncio.to_thread(
         graph.invoke, {"investigation_id": inv_id, "items": items, "threshold": threshold, "min_size": min_size}, {}
-    )
+    )  # LONG (LLM) — tanpa transaksi PG terbuka
     narratives = result.get("narratives", [])
 
-    # Tulis ulang narasi (cascade hapus evidence + assessment lama)
-    await session.execute(delete(Narrative).where(Narrative.investigation_id == inv.id))
+    # Tulis ulang narasi (cascade hapus evidence + assessment lama) — transaksi baru
+    await session.execute(delete(Narrative).where(Narrative.investigation_id == inv_pk))
     for n in narratives:
         row = Narrative(
             investigation_id=inv.id, label=n["label"], summary=n.get("summary"),
@@ -208,6 +213,7 @@ async def run_analysis(
         ))
 
     usage = result.get("usage", {})
+    run = await session.get(AgentRun, run_id)
     run.tokens_in = usage.get("tokens_in", 0)
     run.tokens_out = usage.get("tokens_out", 0)
     run.status = "done"
@@ -215,7 +221,7 @@ async def run_analysis(
     await session.commit()
 
     return {
-        "agent_run_id": run_id, "embedded": len(items), "narratives": len(narratives),
+        "agent_run_id": str(run_id), "embedded": len(items), "narratives": len(narratives),
         "top": [{"label": n["label"], "risk_score": n["risk_score"], "size": n["size"]}
                 for n in narratives[:5]],
     }
