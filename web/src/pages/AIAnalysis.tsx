@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
-import { Button, Card, Empty, Pill, Tile } from "../components/ui";
+import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
 
 const SENT_COLOR: Record<string, string> = {
@@ -81,6 +81,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <Empty icon="analysis">Belum ada hasil analisis untuk investigasi ini. Klik <b>Jalankan Analisis</b> untuk mengklasifikasi komentar.</Empty>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {selected && <ChatPanel inv={selected} />}
+
           <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <ChartCard title="Distribusi Sentimen" icon="comment">
               {sent.length === 0 ? <Mini /> : (
@@ -209,6 +211,75 @@ function TargetSentiment({ ents }: { ents: EntitySentiment[] }) {
           </div>
         </div>
       )}
+    </Card>
+  );
+}
+
+const CHAT_SUGGESTIONS = [
+  "Ringkas temuan utama & beri satu rekomendasi",
+  "Entitas mana paling menonjol dan bagaimana sentimennya?",
+  "Narasi apa yang paling berisiko?",
+  "Emosi dominan publik terhadap topik ini apa?",
+];
+
+function ChatPanel({ inv }: { inv: string }) {
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(q: string) {
+    const question = q.trim();
+    if (!question || busy) return;
+    setInput("");
+    const history = messages.slice(-6);
+    setMessages((m) => [...m, { role: "user", content: question }]);
+    setBusy(true);
+    try {
+      const { answer } = await api.chatInvestigation(inv, question, history);
+      setMessages((m) => [...m, { role: "assistant", content: answer }]);
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", content: "Maaf, gagal menjawab. Coba lagi." }]);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="spark" size={16} /></span>Asisten AI
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>ngobrol dengan data investigasi</span>
+      </div>
+
+      {messages.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto", marginBottom: 12, paddingRight: 2 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "90%" }}>
+              <div style={{
+                fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", padding: "9px 12px", borderRadius: 12,
+                background: m.role === "user" ? "var(--accent-soft)" : "var(--surface-2)",
+                color: m.role === "user" ? "var(--accent-ink)" : "var(--ink)",
+                border: m.role === "assistant" ? "1px solid var(--line)" : "none",
+              }}>{m.content}</div>
+            </div>
+          ))}
+          {busy && <div style={{ alignSelf: "flex-start", fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 7, padding: "4px 2px" }}><Spinner size={13} /> Asisten sedang menganalisis data…</div>}
+        </div>
+      )}
+
+      {messages.length === 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
+          {CHAT_SUGGESTIONS.map((s) => (
+            <button key={s} onClick={() => send(s)} disabled={busy} className="badge"
+              style={{ cursor: "pointer", color: "var(--ink-2)", borderColor: "var(--line)", background: "var(--surface)" }}>{s}</button>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={(e) => { e.preventDefault(); send(input); }} style={{ display: "flex", gap: 8 }}>
+        <input className="input" value={input} onChange={(e) => setInput(e.target.value)}
+          placeholder="Tanya apa saja tentang investigasi ini…" disabled={busy} style={{ flex: 1 }} />
+        <Button type="submit" icon="spark" disabled={busy || !input.trim()}>{busy ? "…" : "Kirim"}</Button>
+      </form>
+      <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 8 }}>Jawaban AI berbasis data investigasi (statistik, narasi, entitas-sentimen) — bisa keliru, verifikasi untuk keputusan penting.</div>
     </Card>
   );
 }

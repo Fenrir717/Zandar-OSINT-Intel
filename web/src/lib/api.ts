@@ -201,6 +201,12 @@ export const api = {
   narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
+  chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
+    req<{ answer: string }>(`/analysis/${inv}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, history }),
+    }),
   systemStatus: () => req<SystemService[]>("/system/status"),
   systemUsers: () => req<SystemUser[]>("/system/users"),
   graphData: (inv: string) => req<KnowledgeGraph>(`/investigations/${inv}/graph`),
