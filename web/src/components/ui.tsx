@@ -56,7 +56,7 @@ export function Tile({ label, value, tone, icon, delta, sub }: {
 }) {
   const color = tone === "crit" ? "var(--crit)" : tone === "warn" ? "var(--warn)" : "var(--ink)";
   return (
-    <div className="card card-hover stat" style={{ padding: "15px 17px" }}>
+    <div className="card card-hover stat" style={{ padding: "15px 17px", height: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700 }}>{label}</div>
