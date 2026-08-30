@@ -5,13 +5,87 @@ import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations
 import { Button, Card, Empty, Pill, Spinner } from "../components/ui";
 import { Icon } from "../components/icons";
 
+// Ekspor PDF vektor (pdfmake, lazy-load): teks rata kanan-kiri, sumber jadi
+// tautan yang bisa diklik, unduh otomatis dengan nama file (tanpa dialog cetak).
+async function downloadReportPdf(rc: ReportContent) {
+  const doc = rc.content;
+  if (!doc) return;
+  // pdfmake 0.3.x sudah mem-bundle font Roboto default (fontContainer) dan
+  // meng-registernya sendiri — cukup import pdfmake, tanpa vfs_fonts/pm.fonts.
+  const { default: pdfMake } = await import("pdfmake/build/pdfmake");
+  const pm = pdfMake as unknown as {
+    createPdf: (d: unknown) => { download: (n: string) => void };
+  };
+
+  const when = rc.created_at ? new Date(rc.created_at) : new Date();
+  const slug = (doc.title || "laporan").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  const filename = `${slug || "Laporan"}-${when.toISOString().slice(0, 10)}.pdf`;
+
+  const content: unknown[] = [
+    { text: doc.title, style: "title" },
+    { text: `${(rc.classification || "").toUpperCase()} · ${rc.status || ""} · ${when.toLocaleString("id", { dateStyle: "medium", timeStyle: "short" })}`, style: "meta" },
+    { text: `${doc.meta?.cited_sources ?? doc.citations.length} sitasi · ${doc.meta?.narratives ?? "-"} narasi`, style: "meta" },
+    { canvas: [{ type: "line", x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 0.5, lineColor: "#d0d0d0" }], margin: [0, 8, 0, 12] },
+  ];
+  for (const s of doc.sections) {
+    content.push({ text: s.heading, style: "h2" });
+    content.push({ text: s.body, style: "body", alignment: "justify" });
+  }
+  if (doc.citations.length) {
+    content.push({ text: `Sumber (${doc.citations.length})`, style: "h2", margin: [0, 14, 0, 6] });
+    content.push({
+      ol: doc.citations.map((c) => ({
+        stack: [
+          { text: `${c.platform || "sumber"}${c.published_at ? " · " + new Date(c.published_at).toLocaleDateString("id") : ""}`, bold: true, fontSize: 9 },
+          ...(c.snippet ? [{ text: c.snippet, color: "#444444", fontSize: 9, margin: [0, 1, 0, 0] }] : []),
+          ...(c.url ? [{ text: c.url, link: c.url, color: "#0E6B62", decoration: "underline", fontSize: 8.5, margin: [0, 1, 0, 0] }] : []),
+        ],
+        margin: [0, 0, 0, 7],
+      })),
+    });
+  }
+
+  const docDefinition = {
+    info: { title: doc.title, creator: "Zandar OSINT" },
+    pageSize: "A4",
+    pageMargins: [50, 54, 50, 54],
+    content,
+    defaultStyle: { font: "Roboto", fontSize: 10.5, lineHeight: 1.4, color: "#1f2937" },
+    styles: {
+      title: { fontSize: 18, bold: true, color: "#0b3b39", margin: [0, 0, 0, 4] },
+      meta: { fontSize: 9, color: "#6b7280" },
+      h2: { fontSize: 13, bold: true, color: "#0E6B62", margin: [0, 12, 0, 5] },
+      body: { fontSize: 10.5, margin: [0, 0, 0, 9] },
+    },
+    footer: (page: number, count: number) => ({
+      text: `Zandar OSINT · Laporan Intelijen · hal ${page}/${count}`,
+      alignment: "center", fontSize: 8, color: "#9ca3af", margin: [0, 8, 0, 0],
+    }),
+  };
+
+  pm.createPdf(docDefinition).download(filename);
+}
+
 export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => void }) {
   const { list, selected, choose } = useInvestigations();
   const [reports, setReports] = useState<ReportMeta[]>([]);
   const [active, setActive] = useState<ReportContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [note, setNote] = useState("");
+
+  async function exportPdf() {
+    if (!active?.content || exporting) return;
+    setExporting(true);
+    try {
+      await downloadReportPdf(active);
+    } catch {
+      setNote("Gagal membuat PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => { headerSlot(<InvestigationPicker list={list} selected={selected} onChange={choose} />); }, [list, selected]);
   useEffect(() => {
@@ -57,7 +131,9 @@ export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => vo
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         {note && <span style={{ fontSize: 12, color: note.startsWith("Gagal") || note.startsWith("Bangun") ? "var(--crit)" : "var(--muted)", marginRight: "auto" }}>{note}</span>}
         {!note && <span style={{ marginRight: "auto" }} />}
-        <Button variant="ghost" icon="download" onClick={() => window.print()} disabled={!active?.content}>Ekspor PDF</Button>
+        <Button variant="ghost" icon="download" onClick={exportPdf} disabled={!active?.content || exporting}>
+          {exporting ? "Menyiapkan…" : "Ekspor PDF"}
+        </Button>
         <Button variant="ghost" icon="refresh" onClick={() => selected && loadList(selected)}>Segarkan</Button>
         <Button icon="reports" onClick={build} disabled={!selected || building}>
           {building ? "Menyusun…" : "Bangun Laporan"}
@@ -97,7 +173,7 @@ export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => vo
             ))}
           </Card>
 
-          <Card className="rise rise-2 report-print" style={{ padding: 20 }}>
+          <Card className="rise rise-2" style={{ padding: 20 }}>
             {active?.content ? <ReportView doc={active.content} meta={active} />
               : <div style={{ display: "grid", placeItems: "center", padding: 40 }}><Spinner size={24} /></div>}
           </Card>

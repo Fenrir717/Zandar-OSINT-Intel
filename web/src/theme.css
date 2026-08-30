@@ -259,17 +259,3 @@ button { font-family: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
-
-/* Cetak / Ekspor PDF: tampilkan HANYA area laporan (.report-print). */
-@media print {
-  body * { visibility: hidden; }
-  .report-print, .report-print * { visibility: visible; }
-  .report-print {
-    position: absolute; left: 0; top: 0; width: 100%;
-    padding: 0 !important; border: none !important; box-shadow: none !important;
-    background: #fff !important; color: #000 !important;
-  }
-  .report-print a { color: #000 !important; text-decoration: underline; }
-  .no-print { display: none !important; }
-  @page { margin: 18mm 16mm; }
-}
