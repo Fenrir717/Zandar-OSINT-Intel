@@ -10,11 +10,26 @@ import { Icon } from "../components/icons";
 async function downloadReportPdf(rc: ReportContent) {
   const doc = rc.content;
   if (!doc) return;
-  // pdfmake 0.3.x sudah mem-bundle font Roboto default (fontContainer) dan
-  // meng-registernya sendiri — cukup import pdfmake, tanpa vfs_fonts/pm.fonts.
+  // pdfmake 0.3.x TIDAK meng-auto-register font — VFS wajib di-set manual, kalau
+  // tidak: "File 'Roboto-Medium.ttf' not found in virtual file system" (error di
+  // dalam promise download() → tak tertangkap, tombol seolah tak merespons).
   const { default: pdfMake } = await import("pdfmake/build/pdfmake");
+  const vfsMod = (await import("pdfmake/build/vfs_fonts")) as unknown as {
+    default?: { vfs?: Record<string, string> } & Record<string, string>;
+    vfs?: Record<string, string>;
+  } & Record<string, string>;
   const pm = pdfMake as unknown as {
+    vfs: Record<string, string>;
+    fonts: Record<string, Record<string, string>>;
     createPdf: (d: unknown) => { download: (n: string) => void };
+  };
+  const rawVfs = vfsMod.default ?? vfsMod;
+  pm.vfs = (rawVfs.vfs ?? rawVfs) as Record<string, string>;
+  pm.fonts = {
+    Roboto: {
+      normal: "Roboto-Regular.ttf", bold: "Roboto-Medium.ttf",
+      italics: "Roboto-Italic.ttf", bolditalics: "Roboto-MediumItalic.ttf",
+    },
   };
 
   const when = rc.created_at ? new Date(rc.created_at) : new Date();
