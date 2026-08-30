@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # NER (Fase 3) — ekstraksi entitas untuk knowledge graph
     ner_model: str = "cahya/bert-base-indonesian-NER"
 
-    # Orkestrasi LangGraph (Fase 2) — stub (default) | groq | gemini | cerebras | openrouter
+    # Orkestrasi LangGraph (Fase 2) — stub (default) | groq | gemini | cerebras | openrouter | bedrock
     llm_provider: str = "stub"
     llm_model_r: str = ""  # kosong = default preset per provider (Tier R reasoning)
     llm_model_f: str = ""  # kosong = default preset per provider (Tier F flash)
@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     gemini_api_key: str = ""
     cerebras_api_key: str = ""
+
+    # Amazon Bedrock (Claude via API key/bearer token) — LLM_PROVIDER=bedrock.
+    # Kualitas & keandalan jauh di atas model gratis (JSON patuh, tanpa bocor bahasa).
+    aws_bearer_token_bedrock: str = ""      # env: AWS_BEARER_TOKEN_BEDROCK
+    aws_region: str = "us-east-1"           # env: AWS_REGION (mis. ap-southeast-3)
+    bedrock_model_r: str = ""               # id/inference-profile model Tier R (reasoning)
+    bedrock_model_f: str = ""               # id/inference-profile model Tier F (flash)
 
     # Embedding (Fase 2) — stub (default, tanpa key) | gemini (gratis, token-based) | local
     embed_provider: str = "stub"
