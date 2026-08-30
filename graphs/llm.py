@@ -267,26 +267,36 @@ def _extract_json(text: str) -> dict:
 
 
 class BedrockProvider(LLMProvider):
-    """Amazon Bedrock via Converse API + API key/bearer token. Claude berkualitas
-    tinggi & patuh JSON (mengatasi model gratis yang balas kosong / bocor bahasa).
-    Satu model per tier (tanpa rantai fallback). LLM_PROVIDER=bedrock."""
+    """Amazon Bedrock via Converse API + API key/bearer token. Tiap tier punya
+    RANTAI model (koma-pisah): primary (mis. Qwen/DeepSeek) → fallback (Amazon Nova)
+    → opsi terakhir (Anthropic Claude, mahal). Model berikutnya dicoba bila yang ini
+    gagal (4xx/5xx/jaringan). Patuh JSON, andal. LLM_PROVIDER=bedrock."""
 
     def __init__(self) -> None:
         s = get_settings()
         self.token = s.aws_bearer_token_bedrock
         self.region = s.aws_region or "us-east-1"
-        self.model_r = s.bedrock_model_r
-        self.model_f = s.bedrock_model_f
+        self.chain_r = _parse_models(s.bedrock_model_r)
+        self.chain_f = _parse_models(s.bedrock_model_f)
         if not self.token:
             raise RuntimeError("LLM_PROVIDER=bedrock butuh AWS_BEARER_TOKEN_BEDROCK di .env.")
-        if not (self.model_r and self.model_f):
+        if not (self.chain_r and self.chain_f):
             raise RuntimeError("LLM_PROVIDER=bedrock butuh BEDROCK_MODEL_R & BEDROCK_MODEL_F di .env.")
         self.base = f"https://bedrock-runtime.{self.region}.amazonaws.com"
 
     def call_json(self, tier: Tier, system: str, user: str, hint: dict | None = None) -> LLMResult:
+        chain = self.chain_r if tier == "R" else self.chain_f
+        errors: list[str] = []
+        for model in chain:  # rantai fallback: primary → cadangan → opsi terakhir
+            try:
+                return self._call_one(model, system, user)
+            except _ModelFailed as e:
+                errors.append(str(e))
+        raise RuntimeError("Semua model Bedrock gagal: " + " | ".join(errors))
+
+    def _call_one(self, model: str, system: str, user: str) -> LLMResult:
         import httpx
 
-        model = self.model_r if tier == "R" else self.model_f
         body = {
             "system": [{"text": system + "\nBalas HANYA JSON valid, tanpa teks lain."}],
             "messages": [{"role": "user", "content": [{"text": user}]}],
@@ -299,9 +309,9 @@ class BedrockProvider(LLMProvider):
                 json=body, timeout=60,
             )
         except httpx.HTTPError as e:
-            raise RuntimeError(f"Bedrock: {type(e).__name__}") from e
+            raise _ModelFailed(f"bedrock:{model}: {type(e).__name__}") from e
         if resp.status_code >= 400:
-            raise RuntimeError(f"Bedrock {resp.status_code}: {resp.text[:200]}")
+            raise _ModelFailed(f"bedrock:{model}: {resp.status_code} {resp.text[:80]}")
         data = resp.json()
         content = "".join(
             b.get("text", "")
