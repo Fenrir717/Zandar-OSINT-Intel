@@ -82,7 +82,7 @@ async def semantic_search(
     from workers.embed import get_embedder
     from workers.vectorstore import search
 
-    vec = get_embedder().embed([q])[0]
+    vec = get_embedder().embed([q], kind="query")[0]
     hits = search(vec, str(investigation_id), limit=limit, platform=platform, lang=lang)
     if not hits:
         return []

@@ -17,8 +17,8 @@ class StubEmbedder(Embedder):
     version = "stub-256"
     dim = _DIM
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        return [self._one(t) for t in texts]
+    def embed(self, texts: list[str], kind: str = "passage") -> list[list[float]]:
+        return [self._one(t) for t in texts]  # stub: abaikan kind
 
     def _one(self, text: str) -> list[float]:
         # Perluas hash jadi vektor dim, lalu normalisasi L2 (cosine-ready)

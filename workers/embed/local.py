@@ -36,13 +36,14 @@ class LocalEmbedder(Embedder):
         self.dim = self._model.config.hidden_size
         self.version = f"local:{model_id.split('/')[-1]}[{self._dev}]"
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def embed(self, texts: list[str], kind: str = "passage") -> list[list[float]]:
         if not texts:
             return []
         torch = self._torch
+        prefix = "query: " if kind == "query" else "passage: "  # e5 asimetris
         out: list[list[float]] = []
         for i in range(0, len(texts), 32):  # batch 32
-            batch = list(texts[i : i + 32])
+            batch = [prefix + t for t in texts[i : i + 32]]
             enc = self._tok(batch, padding=True, truncation=True, max_length=512, return_tensors="pt").to(self._dev)
             with torch.no_grad():
                 hidden = self._model(**enc).last_hidden_state

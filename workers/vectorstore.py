@@ -18,6 +18,12 @@ def ensure_collection(dim: int, name: str | None = None) -> str:
     name = name or get_settings().qdrant_collection
     c = client()
     existing = {col.name for col in c.get_collections().collections}
+    if name in existing:
+        # Bila dimensi berubah (ganti embedder), buat ulang — indeks lama tak kompatibel
+        cur = c.get_collection(name).config.params.vectors.size
+        if cur != dim:
+            c.delete_collection(name)
+            existing.discard(name)
     if name not in existing:
         c.create_collection(
             collection_name=name,
