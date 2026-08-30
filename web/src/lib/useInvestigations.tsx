@@ -32,8 +32,8 @@ export function InvestigationPicker({ list, selected, onChange }: {
   list: Investigation[]; selected: string; onChange: (id: string) => void;
 }) {
   return (
-    <select value={selected} onChange={(e) => onChange(e.target.value)}
-      style={{ padding: "7px 10px", border: "1px solid var(--line)", borderRadius: 6, background: "var(--surface)", color: "var(--ink)", fontSize: 13, minWidth: 240, fontFamily: "inherit" }}>
+    <select value={selected} onChange={(e) => onChange(e.target.value)} className="select"
+      style={{ height: 38, minWidth: 150, maxWidth: "min(260px, 44vw)", width: "auto", flexShrink: 1 }}>
       {list.length === 0 && <option>(belum ada investigasi)</option>}
       {list.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
     </select>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, auth, type User } from "./lib/api";
 import { Shell } from "./components/Shell";
@@ -6,6 +6,9 @@ import { Login } from "./pages/Login";
 import { CommentExplorer } from "./pages/CommentExplorer";
 import { AgentMonitor } from "./pages/AgentMonitor";
 import { Placeholder } from "./pages/Placeholder";
+
+// Code-split: recharts (berat) hanya dimuat saat membuka AI Analysis
+const AIAnalysis = lazy(() => import("./pages/AIAnalysis").then((m) => ({ default: m.AIAnalysis })));
 
 const TITLES: Record<string, string> = {
   "/": "Dashboard", "/investigations": "Investigations", "/collections": "Collections",
@@ -42,7 +45,7 @@ export default function App() {
         <Route path="/" element={<Placeholder title="Dashboard" phase="Fase 2" desc="Ringkasan investigasi aktif, aktivitas koleksi, distribusi sentimen, budget LLM. Menyusul setelah pipeline analisis Fase 2." />} />
         <Route path="/investigations" element={<Placeholder title="Investigations" phase="Fase 1→2" desc="Daftar & pembuatan investigasi dengan tipe target dan data_policy. Backend sudah ada (CRUD + audit); UI menyusul." />} />
         <Route path="/collections" element={<Placeholder title="Collections" phase="Fase 1" desc="Kelola sumber & jadwal koleksi (11 adapter, cron). Backend + worker/beat sudah jalan; UI daftar menyusul. Sementara lihat Riwayat Koleksi di Comment Explorer." />} />
-        <Route path="/analysis" element={<Placeholder title="AI Analysis" phase="Fase 2" desc="Distribusi sentimen/emosi/intent, tren temporal, top topik — dari klasifikasi IndoBERT lokal." />} />
+        <Route path="/analysis" element={<Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Memuat…</div>}><AIAnalysis headerSlot={setHeaderRight} /></Suspense>} />
         <Route path="/graph" element={<Placeholder title="Knowledge Graph" phase="Fase 3" desc="Graf entitas & relasi interaktif, highlight komunitas CIB (Neo4j GDS)." />} />
         <Route path="/forensics" element={<Placeholder title="Forensik Narasi" phase="Fase 3" desc="Matriks kuadran Otentisitas × Kebenaran, skor ABC+D, peta TTP DISARM." />} />
         <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />

@@ -91,38 +91,39 @@ export function Shell({ user, onLogout, right, title, children }: {
       </aside>
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <header style={{ position: "sticky", top: 0, zIndex: 40, display: "flex", alignItems: "center", gap: 12, padding: "0 20px", minHeight: 62, borderBottom: "1px solid var(--line)", background: "color-mix(in srgb, var(--surface) 86%, transparent)", backdropFilter: "blur(8px)" }}>
+        <header style={{ position: "sticky", top: 0, zIndex: 40, display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px 12px", padding: "11px 20px", borderBottom: "1px solid var(--line)", background: "color-mix(in srgb, var(--surface) 86%, transparent)", backdropFilter: "blur(8px)" }}>
           <button className="icon-btn menu-btn" onClick={() => setOpen(true)} aria-label="Menu"><Icon name="menu" size={18} /></button>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flexShrink: 1 }}>
             <h1 style={{ fontSize: 17, margin: 0, lineHeight: 1.2 }}>{title}</h1>
-            {sub && <div className="hide-sm" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "48vw" }}>{sub}</div>}
+            {sub && <div className="hide-sm" style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "44vw" }}>{sub}</div>}
           </div>
-          {right}
-          <div style={{ flex: 1 }} />
-          <div className="hide-sm" style={{ position: "relative", width: 230 }}>
-            <Icon name="search" size={15} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--faint)" }} />
-            <input ref={searchRef} className="input" placeholder="Cari intelijen…" style={{ paddingLeft: 33, paddingRight: 42, height: 38 }} />
-            <kbd style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "var(--faint)", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 5, padding: "2px 5px", fontFamily: "var(--font-mono)" }}>⌘K</kbd>
-          </div>
-          <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ganti tema" title="Ganti tema">
-            <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
-          </button>
-          <button className="icon-btn" aria-label="Notifikasi" title="Notifikasi" style={{ position: "relative" }}>
-            <Icon name="bell" size={17} />
-            <span style={{ position: "absolute", top: 8, right: 9, width: 6, height: 6, borderRadius: "50%", background: "var(--crit)", boxShadow: "0 0 0 2px var(--surface)" }} />
-          </button>
-          {user && (
-            <div className="hide-sm" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 6 }}>
-              <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--accent-grad)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}>
-                {(user.name || "?").slice(0, 1).toUpperCase()}
-              </span>
-              <div style={{ lineHeight: 1.2 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{user.name}</div>
-                <div style={{ fontSize: 10.5, color: "var(--muted)", textTransform: "capitalize" }}>{user.role}</div>
-              </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {right}
+            <div className="hide-sm" style={{ position: "relative", width: 214 }}>
+              <Icon name="search" size={15} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--faint)" }} />
+              <input ref={searchRef} className="input" placeholder="Cari intelijen…" style={{ paddingLeft: 33, paddingRight: 42, height: 38 }} />
+              <kbd style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "var(--faint)", background: "var(--surface-2)", border: "1px solid var(--line)", borderRadius: 5, padding: "2px 5px", fontFamily: "var(--font-mono)" }}>⌘K</kbd>
             </div>
-          )}
-          <button className="icon-btn" onClick={onLogout} aria-label="Keluar" title="Keluar"><Icon name="logout" size={16} /></button>
+            <button className="icon-btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Ganti tema" title="Ganti tema">
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={17} />
+            </button>
+            <button className="icon-btn" aria-label="Notifikasi" title="Notifikasi" style={{ position: "relative" }}>
+              <Icon name="bell" size={17} />
+              <span style={{ position: "absolute", top: 8, right: 9, width: 6, height: 6, borderRadius: "50%", background: "var(--crit)", boxShadow: "0 0 0 2px var(--surface)" }} />
+            </button>
+            {user && (
+              <div className="hide-sm" style={{ display: "flex", alignItems: "center", gap: 9, paddingLeft: 6 }}>
+                <span style={{ width: 34, height: 34, borderRadius: "50%", background: "var(--accent-grad)", color: "#fff", display: "grid", placeItems: "center", fontWeight: 700, fontSize: 13 }}>
+                  {(user.name || "?").slice(0, 1).toUpperCase()}
+                </span>
+                <div style={{ lineHeight: 1.2 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{user.name}</div>
+                  <div style={{ fontSize: 10.5, color: "var(--muted)", textTransform: "capitalize" }}>{user.role}</div>
+                </div>
+              </div>
+            )}
+            <button className="icon-btn" onClick={onLogout} aria-label="Keluar" title="Keluar"><Icon name="logout" size={16} /></button>
+          </div>
         </header>
 
         <main className="content" style={{ padding: "22px 24px", minWidth: 0, flex: 1 }}>
