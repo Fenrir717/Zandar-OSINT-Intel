@@ -12,6 +12,7 @@ from langgraph.types import Command
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.events import publish_agent_event
 from core.models import (
     AgentRun,
     Analysis,
@@ -25,6 +26,33 @@ from core.models import (
     narrative_evidence,
 )
 from graphs.planner import planner_graph
+
+_NODE_LABEL = {  # pesan ramah untuk feed live Agent Monitor
+    "cluster": "mengelompokkan komentar",
+    "label_narratives": "melabeli narasi",
+    "score_risk": "menilai risiko",
+}
+
+
+def _stream_graph(graph, init: dict, run_id: str, inv_id: str) -> dict:
+    """Jalankan graph via stream (sinkron, dalam thread), publikasikan tiap node
+    selesai ke bus event, kembalikan state akhir terakumulasi."""
+    final: dict = {}
+    for step in graph.stream(init, {}, stream_mode="updates"):
+        for node, delta in step.items():
+            if isinstance(delta, dict):
+                final.update(delta)
+            if node == "cluster":
+                detail = f"{len(final.get('clusters', []))} klaster"
+            elif node == "label_narratives":
+                detail = f"{len(final.get('narratives', []))} narasi dilabeli"
+            else:
+                detail = _NODE_LABEL.get(node, node)
+            publish_agent_event({
+                "type": "run", "id": run_id, "investigation_id": inv_id,
+                "graph": "analysis", "status": "running", "node": node, "detail": detail,
+            })
+    return final
 
 
 def _interrupt_payload(result: dict) -> dict | None:
@@ -60,6 +88,10 @@ async def start_plan(session: AsyncSession, inv: Investigation, query: str) -> d
     run.status = "awaiting_approval"
     await session.commit()
 
+    publish_agent_event({
+        "type": "run", "id": run_id, "investigation_id": str(inv.id), "graph": "planner",
+        "status": "awaiting_approval", "node": "human_approval", "detail": "menunggu approval analis",
+    })
     return {"agent_run_id": run_id, "status": "awaiting_approval", "plan": plan}
 
 
@@ -89,6 +121,11 @@ async def resume_plan(
     run.ended_at = datetime.now(UTC)
     await session.commit()
 
+    publish_agent_event({
+        "type": "run", "id": run_id, "investigation_id": str(run.investigation_id), "graph": "planner",
+        "status": run.status, "node": decision,
+        "detail": f"{len(dispatched)} koleksi didispatch" if decision == "approve" else "ditolak",
+    })
     return {"agent_run_id": run_id, "decision": decision, "dispatched_collections": dispatched}
 
 
@@ -183,10 +220,13 @@ async def run_analysis(
         return {"agent_run_id": str(run_id), "embedded": 0, "narratives": 0,
                 "note": "Belum ada komentar ter-embed. Jalankan indexing dulu."}
 
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "analysis",
+        "status": "running", "node": "start", "detail": f"{len(items)} komentar ter-embed",
+    })
     graph = narrator_graph()
-    result = await _asyncio.to_thread(
-        graph.invoke, {"investigation_id": inv_id, "items": items, "threshold": threshold, "min_size": min_size}, {}
-    )  # LONG (LLM) — tanpa transaksi PG terbuka
+    init = {"investigation_id": inv_id, "items": items, "threshold": threshold, "min_size": min_size}
+    result = await _asyncio.to_thread(_stream_graph, graph, init, str(run_id), inv_id)  # LONG (LLM), tanpa tx PG
     narratives = result.get("narratives", [])
 
     # Tulis ulang narasi (cascade hapus evidence + assessment lama) — transaksi baru
@@ -220,6 +260,11 @@ async def run_analysis(
     run.ended_at = datetime.now(UTC)
     await session.commit()
 
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "analysis",
+        "status": "done", "node": "done", "detail": f"{len(narratives)} narasi",
+        "narratives": len(narratives), "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
+    })
     return {
         "agent_run_id": str(run_id), "embedded": len(items), "narratives": len(narratives),
         "top": [{"label": n["label"], "risk_score": n["risk_score"], "size": n["size"]}

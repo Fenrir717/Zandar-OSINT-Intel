@@ -1,13 +1,25 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import CurrentUser, DbSession
+from core.events import subscribe_agent_events
 from core.models import AgentRun, AuditLog, Investigation
 
 router = APIRouter(tags=["planner"])
+
+
+@router.get("/agent-runs/stream")
+async def stream_runs(user: CurrentUser) -> StreamingResponse:
+    """SSE: progres agent-run LangGraph live (node cluster→label→score, approval, dll)."""
+    return StreamingResponse(
+        subscribe_agent_events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
 
 
 class PlanRequest(BaseModel):

@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from core.config import get_settings
 
@@ -13,7 +14,12 @@ class Base(DeclarativeBase):
 engine = create_async_engine(
     get_settings().database_url,
     echo=False,
-    pool_pre_ping=True,
+    # NullPool: JANGAN pool koneksi lintas event-loop. Setiap task Celery memakai
+    # asyncio.run() → loop BARU; koneksi asyncpg terikat ke loop pembuatnya, jadi
+    # koneksi ter-pool dari loop lama (apalagi dengan --pool=threads yang menjalankan
+    # banyak loop bersamaan) → "Event loop is closed". NullPool bikin koneksi segar
+    # per-checkout di loop saat ini. API (uvicorn, satu loop) tetap benar.
+    poolclass=NullPool,
     # Gagal-cepat bila sebuah statement menunggu lock terlalu lama (mis. karena
     # proses lain menahan transaksi) — mencegah worker menggantung tanpa batas.
     connect_args={

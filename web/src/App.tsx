@@ -4,6 +4,7 @@ import { api, auth, type User } from "./lib/api";
 import { Shell } from "./components/Shell";
 import { Login } from "./pages/Login";
 import { CommentExplorer } from "./pages/CommentExplorer";
+import { AgentMonitor } from "./pages/AgentMonitor";
 import { Placeholder } from "./pages/Placeholder";
 
 const TITLES: Record<string, string> = {
@@ -46,7 +47,7 @@ export default function App() {
         <Route path="/forensics" element={<Placeholder title="Forensik Narasi" phase="Fase 3" desc="Matriks kuadran Otentisitas × Kebenaran, skor ABC+D, peta TTP DISARM." />} />
         <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />
         <Route path="/reports" element={<Placeholder title="Reports" phase="Fase 4" desc="Laporan intelijen ber-sitasi (Graph D), ekspor PDF, label klasifikasi." />} />
-        <Route path="/agents" element={<Placeholder title="Agent Monitor" phase="Fase 2" desc="Status run LangGraph real-time, token, biaya, budget cap per investigasi." />} />
+        <Route path="/agents" element={<AgentMonitor headerSlot={setHeaderRight} />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Routes>
     </Shell>
