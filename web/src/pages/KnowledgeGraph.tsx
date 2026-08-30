@@ -257,7 +257,7 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
             <div><div className="tnum" style={{ fontSize: 22, fontWeight: 800, color: "var(--accent-ink)" }}>{data?.stats.relations ?? 0}</div><div style={{ fontSize: 11, color: "var(--muted)" }}>relasi</div></div>
           </Card>
           <div style={{ fontSize: 11, color: "var(--faint)", lineHeight: 1.5, padding: "0 2px" }}>
-            Data NYATA: entitas hasil NER lokal + ko-okurensi. Resolusi entitas & deteksi komunitas (CIB) = lanjutan Fase 3.
+            Data NYATA: entitas NER lokal (sudah diresolusi/digabung) + ko-okurensi. Deteksi komunitas (CIB) = lanjutan Fase 3.
           </div>
         </div>
 

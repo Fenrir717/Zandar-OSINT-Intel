@@ -30,6 +30,66 @@ def _key(typ: str, name: str) -> str:
     return f"{typ}:{normalize(name)}"
 
 
+def _resolve(
+    nodes: dict[str, dict], pairs: dict[tuple[str, str], int]
+) -> tuple[dict[str, dict], dict[tuple[str, str], int]]:
+    """Resolusi entitas: (1) satukan nama sama beda-tipe → tipe dominan; (2) untuk
+    ORANG, gabung sub-nama ke nama lengkap (token-subset: 'febrie' ⊂ 'febrie adriansyah').
+    Kembalikan node & pasangan yang sudah digabung + di-remap."""
+    from workers.ner.extract import normalize
+
+    # Pass 1 — kelompokkan per nama ternormalisasi (lintas tipe)
+    by_name: dict[str, list[dict]] = {}
+    for n in nodes.values():
+        by_name.setdefault(normalize(n["name"]), []).append(n)
+    canon: dict[str, dict] = {}
+    remap: dict[str, str] = {}
+    for name, group in by_name.items():
+        dom = max(group, key=lambda x: x["mentions"])  # tipe dominan = paling banyak disebut
+        ck = f"{dom['type']}:{name}"
+        canon[ck] = {"key": ck, "name": dom["name"], "type": dom["type"], "mentions": sum(x["mentions"] for x in group)}
+        for x in group:
+            remap[x["key"]] = ck
+
+    # Pass 2 — ORANG: serap sub-nama ke superset token dgn sebutan terbanyak
+    persons = [c for c in canon.values() if c["type"] == "person"]
+    ptok = {c["key"]: set(normalize(c["name"]).split()) for c in persons}
+    absorbed: dict[str, str] = {}
+    for a in persons:
+        at = ptok[a["key"]]
+        if not at:
+            continue
+        best = None
+        for b in persons:
+            if a["key"] != b["key"] and at < ptok[b["key"]] and (best is None or b["mentions"] > best["mentions"]):
+                best = b
+        if best is not None:
+            absorbed[a["key"]] = best["key"]
+
+    def final(k: str) -> str:
+        seen: set[str] = set()
+        while k in absorbed and k not in seen:
+            seen.add(k)
+            k = absorbed[k]
+        return k
+
+    fnodes: dict[str, dict] = {}
+    for ck, node in canon.items():
+        fk = final(ck)
+        t = fnodes.setdefault(fk, {"key": fk, "name": canon[fk]["name"], "type": canon[fk]["type"], "mentions": 0})
+        t["mentions"] += node["mentions"]
+    keymap = {oldk: final(ck) for oldk, ck in remap.items()}
+
+    fpairs: dict[tuple[str, str], int] = {}
+    for (a, b), c in pairs.items():
+        fa, fb = keymap.get(a, a), keymap.get(b, b)
+        if fa == fb:
+            continue
+        k = (fa, fb) if fa < fb else (fb, fa)
+        fpairs[k] = fpairs.get(k, 0) + c
+    return fnodes, fpairs
+
+
 def clear_graph(inv: str) -> None:
     with driver().session() as sess:
         sess.run("MATCH (n:Entity {inv:$inv}) DETACH DELETE n", inv=inv)
@@ -54,6 +114,7 @@ def write_graph(inv: str, per_comment: list[list]) -> dict:
         for a, b in combinations(keys, 2):  # pasangan tak-berurut (a<b) → deterministik
             pairs[(a, b)] = pairs.get((a, b), 0) + 1
 
+    nodes, pairs = _resolve(nodes, pairs)  # resolusi entitas (gabung varian/duplikat)
     clear_graph(inv)
     with driver().session() as sess:
         if nodes:
