@@ -266,6 +266,55 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
+class BedrockProvider(LLMProvider):
+    """Amazon Bedrock via Converse API + API key/bearer token. Claude berkualitas
+    tinggi & patuh JSON (mengatasi model gratis yang balas kosong / bocor bahasa).
+    Satu model per tier (tanpa rantai fallback). LLM_PROVIDER=bedrock."""
+
+    def __init__(self) -> None:
+        s = get_settings()
+        self.token = s.aws_bearer_token_bedrock
+        self.region = s.aws_region or "us-east-1"
+        self.model_r = s.bedrock_model_r
+        self.model_f = s.bedrock_model_f
+        if not self.token:
+            raise RuntimeError("LLM_PROVIDER=bedrock butuh AWS_BEARER_TOKEN_BEDROCK di .env.")
+        if not (self.model_r and self.model_f):
+            raise RuntimeError("LLM_PROVIDER=bedrock butuh BEDROCK_MODEL_R & BEDROCK_MODEL_F di .env.")
+        self.base = f"https://bedrock-runtime.{self.region}.amazonaws.com"
+
+    def call_json(self, tier: Tier, system: str, user: str, hint: dict | None = None) -> LLMResult:
+        import httpx
+
+        model = self.model_r if tier == "R" else self.model_f
+        body = {
+            "system": [{"text": system + "\nBalas HANYA JSON valid, tanpa teks lain."}],
+            "messages": [{"role": "user", "content": [{"text": user}]}],
+            "inferenceConfig": {"maxTokens": _MAX_TOKENS, "temperature": 0},
+        }
+        try:
+            resp = httpx.post(
+                f"{self.base}/model/{model}/converse",
+                headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+                json=body, timeout=60,
+            )
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"Bedrock: {type(e).__name__}") from e
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Bedrock {resp.status_code}: {resp.text[:200]}")
+        data = resp.json()
+        content = "".join(
+            b.get("text", "")
+            for b in data.get("output", {}).get("message", {}).get("content", [])
+        )
+        usage = data.get("usage", {})
+        return LLMResult(
+            data=_extract_json(content),
+            tokens_in=usage.get("inputTokens", 0),
+            tokens_out=usage.get("outputTokens", 0),
+        )
+
+
 _instance: LLMProvider | None = None
 
 
@@ -275,10 +324,14 @@ def get_llm() -> LLMProvider:
         name = get_settings().llm_provider
         if name == "stub":
             _instance = StubProvider()
+        elif name == "bedrock":
+            _instance = BedrockProvider()
         elif name in PRESETS:
             _instance = OpenAICompatProvider(name)
         else:
-            raise ValueError(f"LLM_PROVIDER tidak dikenal: {name} (pilih: stub, {', '.join(PRESETS)})")
+            raise ValueError(
+                f"LLM_PROVIDER tidak dikenal: {name} (pilih: stub, bedrock, {', '.join(PRESETS)})"
+            )
     return _instance
 
 
