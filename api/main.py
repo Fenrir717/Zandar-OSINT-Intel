@@ -11,6 +11,7 @@ from api.routers import (
     collections,
     comments,
     investigations,
+    narratives,
     planner,
     sources,
 )
@@ -39,6 +40,7 @@ app.include_router(collections.router, prefix="/api/v1")
 app.include_router(comments.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(planner.router, prefix="/api/v1")
+app.include_router(narratives.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])

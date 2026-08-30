@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.db import SessionLocal
-from core.models import Analysis, Collection, CollectionRun, Comment, Source
+from core.models import Analysis, Collection, CollectionRun, Comment, Investigation, Source
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
 from workers.classify import get_classifier
@@ -199,6 +199,22 @@ async def _embed(investigation_id: str, batch_size: int) -> dict:
         ]
         indexed += upsert(vectors, payloads)
     return {"investigation_id": investigation_id, "indexed": indexed, "model": emb.version, "dim": emb.dim}
+
+
+@celery_app.task(bind=True)
+def build_narratives(self, investigation_id: str, threshold: float = 0.86, min_size: int = 2) -> dict:
+    """Graph C: cluster komentar ter-embed → narasi + skor risiko (butuh embedding dulu)."""
+    return asyncio.run(_build_narratives(investigation_id, threshold, min_size))
+
+
+async def _build_narratives(investigation_id: str, threshold: float, min_size: int) -> dict:
+    from graphs.runner import run_analysis
+
+    async with SessionLocal() as session:
+        inv = await session.get(Investigation, uuid.UUID(investigation_id))
+        if inv is None:
+            return {"status": "not_found"}
+        return await run_analysis(session, inv, threshold, min_size)
 
 
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:

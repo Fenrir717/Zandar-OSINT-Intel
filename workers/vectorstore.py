@@ -71,6 +71,31 @@ def search(
     return [{"score": h.score, **(h.payload or {})} for h in hits]
 
 
+def fetch_vectors(investigation_id: str, name: str | None = None) -> dict[str, list[float]]:
+    """Ambil SEMUA vektor komentar satu investigasi (untuk clustering Graph C).
+
+    Kembalikan {comment_id: vector}. Memakai scroll berhalaman (with_vectors)."""
+    name = name or get_settings().qdrant_collection
+    c = client()
+    flt = qm.Filter(must=[qm.FieldCondition(key="investigation_id", match=qm.MatchValue(value=investigation_id))])
+    out: dict[str, list[float]] = {}
+    offset = None
+    while True:
+        try:
+            points, offset = c.scroll(
+                collection_name=name, scroll_filter=flt, with_vectors=True, with_payload=True, limit=256, offset=offset,
+            )
+        except Exception:
+            break  # koleksi belum ada → kosong
+        for p in points:
+            cid = (p.payload or {}).get("comment_id") or str(p.id)
+            if p.vector is not None:
+                out[cid] = list(p.vector)
+        if offset is None:
+            break
+    return out
+
+
 def count(name: str | None = None) -> int:
     name = name or get_settings().qdrant_collection
     try:

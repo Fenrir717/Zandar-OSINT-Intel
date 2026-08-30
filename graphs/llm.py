@@ -86,6 +86,18 @@ class StubProvider(LLMProvider):
                 if not k.startswith("#"):
                     expanded.append("#" + k.replace(" ", ""))
             data = {"keywords": list(dict.fromkeys(expanded))[:12]}
+        elif kind == "label_narrative":
+            # Ekstraktif: kata paling sering (non-stopword) → label; kalimat wakil → ringkasan
+            texts: list[str] = hint.get("texts", [])
+            freq: dict[str, int] = {}
+            for t in texts:
+                for w in _WORD.findall(t.lower()):
+                    if w not in _STOP and len(w) > 3:
+                        freq[w] = freq.get(w, 0) + 1
+            top = sorted(freq, key=lambda w: (-freq[w], w))[:4]
+            label = " ".join(top).title() if top else (texts[0][:40] if texts else "Narasi")
+            summary = (texts[0][:180] if texts else "")
+            data = {"label": label, "summary": summary}
         elif kind == "select_sources":
             # Stub memilih sumber free-tier tanpa kredensial (aman untuk dijalankan)
             kws: list[str] = hint.get("keywords", [])
