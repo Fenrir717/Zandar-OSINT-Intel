@@ -123,7 +123,33 @@ export const api = {
   },
   me: () => req<User>("/auth/me"),
   investigations: () => req<Investigation[]>("/investigations"),
+  createInvestigation: (body: {
+    title: string; description?: string; priority?: string;
+    data_policy?: string; budget_cap_usd?: number | null; project_id?: string;
+  }) =>
+    req<Investigation>("/investigations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   projects: () => req<Project[]>("/projects"),
+  createProject: (name: string) =>
+    req<Project>("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+  createCollection: (body: {
+    investigation_id: string; platform: string;
+    query: Record<string, unknown>; schedule_cron?: string | null;
+  }) =>
+    req<Collection>("/collections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  runCollection: (col: string) =>
+    req<Run>(`/collections/${col}/run`, { method: "POST" }),
   commentStats: (inv: string) => req<CommentStats>(`/comments/stats?investigation_id=${inv}`),
   searchComments: (params: Record<string, string>) =>
     req<Comment[]>("/comments/search?" + new URLSearchParams(params).toString()),

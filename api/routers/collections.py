@@ -13,7 +13,8 @@ router = APIRouter(prefix="/collections", tags=["collections"])
 
 class CollectionCreate(BaseModel):
     investigation_id: uuid.UUID
-    source_id: uuid.UUID
+    source_id: uuid.UUID | None = None
+    platform: str | None = None  # alternatif source_id: Source dibuat/ditemukan otomatis
     query: dict
     schedule_cron: str | None = None
 
@@ -57,12 +58,30 @@ async def create_collection(
 ) -> Collection:
     if await session.get(Investigation, body.investigation_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Investigasi tidak ditemukan")
-    if await session.get(Source, body.source_id) is None:
+
+    source_id = body.source_id
+    if source_id is None:
+        # Tanpa source_id eksplisit: temukan/buat Source berdasarkan platform.
+        if not body.platform:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "source_id atau platform wajib diisi"
+            )
+        existing = (await session.execute(
+            select(Source).where(Source.platform == body.platform).limit(1)
+        )).scalar_one_or_none()
+        if existing is not None:
+            source_id = existing.id
+        else:
+            src = Source(platform=body.platform, config={})
+            session.add(src)
+            await session.flush()
+            source_id = src.id
+    elif await session.get(Source, source_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sumber tidak ditemukan")
 
     col = Collection(
         investigation_id=body.investigation_id,
-        source_id=body.source_id,
+        source_id=source_id,
         query=body.query,
         schedule_cron=body.schedule_cron,
     )
