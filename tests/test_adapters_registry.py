@@ -11,7 +11,7 @@ EXPECTED = {
     # metode koleksi (kunci registry)
     "rss", "news", "blog", "website", "forum",
     "github", "youtube", "reddit", "telegram", "x", "tiktok",
-    "x_vendor", "har", "youtube_transcript", "wayback", "nitter",
+    "x_vendor", "har", "youtube_transcript", "wayback", "nitter", "bps",
 }
 
 

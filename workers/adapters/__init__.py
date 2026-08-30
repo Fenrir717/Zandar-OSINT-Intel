@@ -20,6 +20,7 @@ from workers.adapters.base import (
     RawItem,
 )
 from workers.adapters.blog import BlogAdapter
+from workers.adapters.bps import BPSAdapter
 from workers.adapters.forum import ForumAdapter
 from workers.adapters.github import GitHubAdapter
 from workers.adapters.har_import import HarImportAdapter
@@ -41,6 +42,7 @@ _CLASSES: list[type[BaseAdapter]] = [
     YouTubeAdapter, RedditAdapter, TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
+    BPSAdapter,  # ground truth resmi
 ]
 
 ADAPTERS: dict[str, type[BaseAdapter]] = {cls.registry_key(): cls for cls in _CLASSES}

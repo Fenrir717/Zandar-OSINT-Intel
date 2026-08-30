@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     youtube_api_key: str = ""
     github_token: str = ""
     x_bearer_token: str = ""  # sumber metered — lihat XAdapter cost guard
+    bps_token: str = ""  # BPS WebAPI (ground truth) — daftar di webapi.bps.go.id/developer
 
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""
