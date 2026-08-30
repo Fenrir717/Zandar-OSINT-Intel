@@ -30,6 +30,9 @@ const P: Record<string, string> = {
   filter: "M3 5h18l-7 8v5l-4 2v-7z",
   spark: "M13 2L4 14h7l-1 8 9-12h-7z",
   logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  expand: "M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3",
+  minus: "M5 12h14",
+  reset: "M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.4 2.6L3 8M3 3v5h5",
 };
 
 export type IconName = keyof typeof P;
