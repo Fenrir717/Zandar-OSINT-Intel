@@ -197,7 +197,19 @@ python scripts/eval_classifier.py --provider lexicon indobert
 
 Hasil terukur (NusaX test, 400 kalimat): **IndoBERT macro-F1 0.894 (LULUS)** vs
 **lexicon 0.541 (gagal)**. Leksikon = baseline agar backend jalan; IndoBERT = jalur
-produksi tervalidasi.
+produksi tervalidasi. Bahasa daerah lebih rendah (Jawa 0.758, Sunda 0.753) — model
+Indonesia-sentris.
+
+Emosi juga tervalidasi terhadap **IndoNLU EmoT** (tweet):
+
+```bash
+python scripts/eval_classifier.py --task emotion --provider indobert
+```
+
+Model emosi default `StevenLimcorn/...emotion` (dilatih EmoT/Twitter) = **F1 0.717**,
+jauh di atas alternatif review-produk `w11wo/...prdect-id` (0.419). Ganti via
+`INDOBERT_EMOTION_MODEL`. (Gate 0.82 adalah untuk sentimen; emosi 5-kelas ceiling
+realistisnya lebih rendah.)
 
 ## Observability (opsional)
 
