@@ -273,10 +273,40 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
         </Card>
       </div>
 
+      {data && data.nodes.length > 0 && <TopEntities nodes={data.nodes} sel={sel} onSelect={setSel} />}
+
       {expanded && createPortal(
         <div ref={wrapRef} style={{ position: "fixed", inset: 0, zIndex: 200, background: "var(--bg)", display: "flex", flexDirection: "column" }}>{content}</div>,
         document.body,
       )}
     </div>
+  );
+}
+
+function TopEntities({ nodes, sel, onSelect }: { nodes: GraphNode[]; sel: string | null; onSelect: (id: string | null) => void }) {
+  const top = [...nodes].sort((a, b) => b.mentions - a.mentions).slice(0, 15);
+  return (
+    <Card style={{ padding: 16, marginTop: 16 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="graph" size={16} /></span>Entitas Teratas
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>klik untuk fokus di grafik</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {top.map((n) => {
+          const on = sel === n.id;
+          return (
+            <button key={n.id} onClick={() => onSelect(on ? null : n.id)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "5px 11px", borderRadius: 999,
+                border: `1px solid ${on ? "var(--accent)" : "var(--line)"}`, background: on ? "var(--accent-soft)" : "var(--surface-2)",
+                color: "var(--ink)", cursor: "pointer", transition: "background var(--dur) var(--ease), border-color var(--dur) var(--ease)",
+              }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: color(n.type) }} />
+              {n.label} <Pill tone="muted">{n.mentions}</Pill>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
