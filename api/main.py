@@ -13,6 +13,7 @@ from api.routers import (
     comments,
     graph,
     investigations,
+    market,
     narratives,
     planner,
     projects,
@@ -51,6 +52,7 @@ app.include_router(system.router, prefix="/api/v1")
 app.include_router(graph.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(claims.router, prefix="/api/v1")
+app.include_router(market.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])

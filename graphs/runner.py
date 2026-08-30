@@ -99,7 +99,8 @@ async def start_plan(session: AsyncSession, inv: Investigation, query: str) -> d
 
 
 async def resume_plan(
-    session: AsyncSession, run_id: str, decision: str, edited_sources: list[dict] | None
+    session: AsyncSession, run_id: str, decision: str, edited_sources: list[dict] | None,
+    auto_pipeline: bool = False,
 ) -> dict:
     run = await session.get(AgentRun, uuid.UUID(run_id))
     if run is None:
@@ -115,7 +116,9 @@ async def resume_plan(
 
     dispatched: list[str] = []
     if decision == "approve":
-        dispatched = await _dispatch_sources(session, run.investigation_id, result.get("sources", []))
+        dispatched = await _dispatch_sources(
+            session, run.investigation_id, result.get("sources", []), auto_pipeline
+        )
 
     usage = result.get("usage", {})
     run.tokens_in = usage.get("tokens_in", run.tokens_in)
@@ -145,12 +148,19 @@ async def _get_or_create_source(session: AsyncSession, platform: str) -> Source:
 
 
 async def _dispatch_sources(
-    session: AsyncSession, investigation_id: uuid.UUID, sources: list[dict]
+    session: AsyncSession, investigation_id: uuid.UUID, sources: list[dict],
+    auto_pipeline: bool = False,
 ) -> list[str]:
-    """Buat Collection + CollectionRun(queued) per sumber dan enqueue collect_source."""
+    """Buat Collection + CollectionRun(queued) per sumber dan enqueue collect_source.
+
+    auto_pipeline=True (mode Scan/autonomous loop): koleksi didispatch sebagai chord
+    Celery; begitu SEMUA koleksi selesai, callback run_scan_pipeline menjalankan rantai
+    analisis penuh (classify→embed→narasi→graph). collect_source tak pernah meledak
+    (semua error ditangkap → return dict), jadi chord dijamin memicu callback."""
     from workers.tasks import collect_source
 
     created: list[str] = []
+    sigs = []
     for s in sources:
         platform = s.get("platform")
         if platform is None:
@@ -162,8 +172,20 @@ async def _dispatch_sources(
         run = CollectionRun(collection_id=col.id, status="queued")
         session.add(run)
         await session.flush()
-        collect_source.delay(str(col.id), str(run.id))
+        sigs.append(collect_source.s(str(col.id), str(run.id)))
         created.append(str(col.id))
+
+    if not sigs:
+        return created
+    if auto_pipeline:
+        from celery import chord
+
+        from workers.tasks import run_scan_pipeline
+
+        chord(sigs)(run_scan_pipeline.si(str(investigation_id)))
+    else:
+        for sig in sigs:
+            sig.apply_async()
     return created
 
 

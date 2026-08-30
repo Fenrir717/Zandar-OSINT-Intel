@@ -28,6 +28,7 @@ class PlanRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     edited_sources: list[dict] | None = None
+    auto_pipeline: bool = True  # mode Scan: rantai analisis penuh otomatis usai koleksi
 
 
 @router.post("/investigations/{investigation_id}/plan", status_code=status.HTTP_201_CREATED)
@@ -52,7 +53,7 @@ async def approve(
     run_id: uuid.UUID, body: ApproveRequest, session: DbSession, user: CurrentUser
 ) -> dict:
     """Resume Graph A dengan approval → dispatch koleksi."""
-    return await _resume(session, user, run_id, "approve", body.edited_sources)
+    return await _resume(session, user, run_id, "approve", body.edited_sources, body.auto_pipeline)
 
 
 @router.post("/agent-runs/{run_id}/reject")
@@ -80,7 +81,10 @@ async def list_runs(
     ]
 
 
-async def _resume(session, user, run_id: uuid.UUID, decision: str, edited: list[dict] | None) -> dict:
+async def _resume(
+    session, user, run_id: uuid.UUID, decision: str, edited: list[dict] | None,
+    auto_pipeline: bool = False,
+) -> dict:
     run = await session.get(AgentRun, run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent run tidak ditemukan")
@@ -89,7 +93,7 @@ async def _resume(session, user, run_id: uuid.UUID, decision: str, edited: list[
 
     from graphs.runner import resume_plan
 
-    result = await resume_plan(session, str(run_id), decision, edited)
+    result = await resume_plan(session, str(run_id), decision, edited, auto_pipeline)
     session.add(AuditLog(user_id=user.id, action=f"planner.{decision}", resource=f"agent_run:{run_id}"))
     await session.commit()
     return result

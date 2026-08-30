@@ -143,6 +143,37 @@ export interface ClaimVerdict {
   authoritative: ClaimAuthoritative[]; review_status: string | null; created_at: string | null;
 }
 
+export interface PlanSource {
+  platform: string; query: Record<string, unknown>; est_items?: number;
+}
+export interface PlanData {
+  intent: Record<string, unknown>; keywords: string[]; sources: PlanSource[];
+  cost: { est_items: number; est_cost_usd: number; within_budget: boolean };
+}
+export interface PlanResult {
+  agent_run_id: string; status: string; plan: PlanData | null;
+}
+
+export interface MarketCategory { key: string; label: string; note: string; }
+export interface MarketSpacing {
+  n: number; area_km2: number; density_km2: number;
+  nn_min: number; nn_p25: number; nn_median: number; nn_mean: number; nn_p75: number; nn_max: number;
+  clark_evans_r: number; pattern: string; catchment_radius_m: number;
+}
+export interface MarketPoint { name: string; lat: number; lon: number; label?: string; weight?: number; selector?: string; }
+export interface MarketZone {
+  lat: number; lon: number; demand: number; demand_items: Record<string, number>;
+  comp_near: number; dist_nearest_comp: number; score: number;
+}
+export interface MarketResult {
+  category: { key: string; label: string; note: string; competitor_selectors: string[] };
+  location: { query: string; display_name: string; lat: number; lon: number; radius_m: number; area_km2: number };
+  competitors: { count: number; spacing: MarketSpacing; points: MarketPoint[] };
+  demand: { count: number; by_label: Record<string, number>; points: MarketPoint[] };
+  best_zones: MarketZone[];
+  caveats: string[];
+}
+
 // ---- endpoint ----
 export const api = {
   async login(email: string, password: string) {
@@ -193,6 +224,50 @@ export const api = {
   adapters: () => req<AdapterInfo[]>("/sources/adapters"),
   agentRuns: (inv?: string) =>
     req<AgentRun[]>("/agent-runs" + (inv ? `?investigation_id=${inv}` : "")),
+  // Commander (Graph A) — mode Scan
+  plan: (inv: string, query: string) =>
+    req<PlanResult>(`/investigations/${inv}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    }),
+  approvePlan: (
+    runId: string,
+    body: { edited_sources?: PlanSource[] | null; auto_pipeline?: boolean },
+  ) =>
+    req<{ agent_run_id: string; decision: string; dispatched_collections: string[] }>(
+      `/agent-runs/${runId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
+  rejectPlan: (runId: string) =>
+    req<{ agent_run_id: string; decision: string }>(`/agent-runs/${runId}/reject`, { method: "POST" }),
+  // Riset Pasar Geospasial (pilar general — OSM)
+  marketCategories: () => req<MarketCategory[]>("/market/categories"),
+  marketScan: (body: { category: string; location: string; radius_m: number }) =>
+    req<MarketResult>("/market/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  marketReport: (res: MarketResult) =>
+    req<{ filename: string; html: string }>("/market/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(res),
+    }),
+  // PDF dirender server (Chromium headless) — konsisten, link tetap bisa diklik.
+  marketReportPdf: async (res: MarketResult): Promise<Blob> => {
+    const r = await fetch(BASE + "/market/report.pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}) },
+      body: JSON.stringify(res),
+    });
+    if (!r.ok) throw new ApiError(r.status, "PDF gagal dibuat");
+    return await r.blob();
+  },
   buildNarratives: (inv: string, threshold = 0.86, minSize = 2) =>
     req<{ task_id: string; status: string }>(`/investigations/${inv}/narratives/build`, {
       method: "POST",

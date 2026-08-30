@@ -4,6 +4,8 @@ import { api, auth, type User } from "./lib/api";
 import { Shell } from "./components/Shell";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
+import { Scan } from "./pages/Scan";
+import { MarketResearch } from "./pages/MarketResearch";
 import { CommentExplorer } from "./pages/CommentExplorer";
 import { AgentMonitor } from "./pages/AgentMonitor";
 import { AIAnalysis } from "./pages/AIAnalysis";
@@ -18,9 +20,9 @@ import { VerifikasiKlaim } from "./pages/VerifikasiKlaim";
 import { Settings } from "./pages/Settings";
 
 const TITLES: Record<string, string> = {
-  "/": "Dashboard", "/projects": "Projects", "/investigations": "Investigations",
+  "/": "Dashboard", "/scan": "Scan Commander", "/projects": "Projects", "/investigations": "Investigations",
   "/collections": "Collections", "/explorer": "Comment Explorer", "/analysis": "AI Analysis",
-  "/graph": "Knowledge Graph", "/timeline": "Timeline", "/forensics": "Forensik Narasi",
+  "/market": "Riset Pasar", "/graph": "Knowledge Graph", "/timeline": "Timeline", "/forensics": "Forensik Narasi",
   "/veracity": "Verifikasi Klaim", "/reports": "Reports", "/agents": "Agent Monitor",
   "/settings": "Settings",
 };
@@ -50,6 +52,8 @@ export default function App() {
     <Shell user={user} onLogout={logout} title={title} right={headerRight}>
       <Routes>
           <Route path="/" element={<Dashboard headerSlot={setHeaderRight} />} />
+          <Route path="/scan" element={<Scan headerSlot={setHeaderRight} />} />
+          <Route path="/market" element={<MarketResearch headerSlot={setHeaderRight} />} />
           <Route path="/projects" element={<Projects headerSlot={setHeaderRight} />} />
           <Route path="/investigations" element={<Investigations headerSlot={setHeaderRight} />} />
           <Route path="/collections" element={<Collections headerSlot={setHeaderRight} />} />

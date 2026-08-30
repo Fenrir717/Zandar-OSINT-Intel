@@ -6,10 +6,12 @@ import { Icon, type IconName } from "./icons";
 const NAV: { section: string; items: { to: string; label: string; icon: IconName; phase?: string }[] }[] = [
   { section: "Overview", items: [
     { to: "/", label: "Dashboard", icon: "dashboard" },
+    { to: "/scan", label: "Scan", icon: "target" },
     { to: "/projects", label: "Projects", icon: "projects" },
     { to: "/investigations", label: "Investigations", icon: "search" },
   ]},
   { section: "Intelligence", items: [
+    { to: "/market", label: "Riset Pasar", icon: "target" },
     { to: "/collections", label: "Collections", icon: "collections" },
     { to: "/explorer", label: "Comment Explorer", icon: "comment" },
     { to: "/analysis", label: "AI Analysis", icon: "analysis" },
@@ -27,8 +29,10 @@ const NAV: { section: string; items: { to: string; label: string; icon: IconName
 
 const SUBTITLE: Record<string, string> = {
   "/": "Ikhtisar investigasi aktif, pipeline koleksi, dan status analisis AI.",
+  "/scan": "Satu kata kunci → agen memilih sumber, mengumpulkan, dan menganalisis otomatis.",
   "/projects": "Kelola project investigasi dan tingkat klasifikasi.",
   "/investigations": "Buat & kelola investigasi OSINT dengan sumber & pipeline analisis.",
+  "/market": "Riset pasar geospasial: peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap).",
   "/collections": "Pantau job koleksi, status antrean, dan performa kolektor.",
   "/explorer": "Telusuri & analisis komentar publik lintas platform dengan tag sentimen.",
   "/analysis": "Distribusi sentimen, emosi, intent, topik — dari klasifikasi IndoBERT lokal.",

@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.db import worker_session
+from core.events import publish_agent_event
 from core.models import Analysis, Collection, CollectionRun, Comment, Investigation, Source
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
@@ -277,6 +278,52 @@ def _ner_and_write(inv_id: str, texts: list[str], sentiments: list[dict] | None 
 
     ents = get_ner().extract(texts)
     return graph.write_graph(inv_id, ents, sentiments)
+
+
+# ---------------------------------------------------------------- Autonomous loop (Commander)
+
+@celery_app.task(bind=True)
+def run_scan_pipeline(self, investigation_id: str) -> dict:
+    """Autonomous loop: setelah SEMUA koleksi scan selesai, jalankan rantai analisis
+    penuh — classify → embed → narasi (Graph C) → knowledge graph + sentimen per-target.
+
+    Dipicu sebagai callback chord dari dispatch koleksi (lihat graphs.runner). Tiap
+    tahap memancarkan event 'scan' ke bus agar UI Scan menampilkan progres langsung.
+    Kegagalan satu tahap dicatat tapi tak menghentikan tahap lain yang masih mungkin
+    (mis. graph tetap dicoba walau narasi gagal)."""
+    return asyncio.run(_scan_pipeline(investigation_id))
+
+
+async def _scan_pipeline(investigation_id: str) -> dict:
+    def emit(node: str, detail: str, status: str = "running") -> None:
+        publish_agent_event({
+            "type": "run", "id": f"scan-{investigation_id}", "investigation_id": investigation_id,
+            "graph": "scan", "status": status, "node": node, "detail": detail,
+        })
+
+    out: dict = {"investigation_id": investigation_id, "stages": {}}
+    stages = (
+        ("classify", "mengklasifikasi komentar (sentimen · emosi · sarkasme)",
+         lambda: _classify(investigation_id, 200, False)),
+        ("embed", "meng-embed komentar untuk klasterisasi narasi",
+         lambda: _embed(investigation_id, 100)),
+        ("narratives", "mengelompokkan & melabeli narasi (Graph C)",
+         lambda: _build_narratives(investigation_id, 0.86, 2)),
+        ("graph", "membangun knowledge graph + sentimen per-target",
+         lambda: _build_graph(investigation_id, 500)),
+    )
+    for node, detail, fn in stages:
+        emit(node, detail)
+        try:
+            out["stages"][node] = await fn()
+        except Exception as exc:  # tahap gagal dicatat, pipeline lanjut
+            out["stages"][node] = {"error": f"{type(exc).__name__}: {exc}"}
+            emit(node, f"gagal: {type(exc).__name__}", status="failed")
+
+    nar = out["stages"].get("narratives", {})
+    detail = f"selesai · {nar.get('narratives', 0)} narasi" if isinstance(nar, dict) else "selesai"
+    emit("done", detail, status="done")
+    return out
 
 
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:

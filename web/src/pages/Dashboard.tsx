@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, type AgentRun, type Investigation } from "../lib/api";
 import { Button, Card, Empty, Pill, ProgressBar, Spinner, Tile } from "../components/ui";
@@ -40,6 +41,7 @@ function countBy<T>(items: T[], key: (t: T) => string, order: string[]): { name:
 }
 
 export function Dashboard({ headerSlot }: { headerSlot: (n: React.ReactNode) => void }) {
+  const nav = useNavigate();
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +82,7 @@ export function Dashboard({ headerSlot }: { headerSlot: (n: React.ReactNode) => 
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
         {error && <span style={{ fontSize: 12, color: "var(--crit-ink)", alignSelf: "center", marginRight: "auto" }}>{error}</span>}
+        <Button icon="target" onClick={() => nav("/scan")}>Scan topik baru</Button>
         <Button variant="ghost" icon="refresh" onClick={load}>Segarkan</Button>
       </div>
 
