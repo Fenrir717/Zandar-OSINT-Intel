@@ -123,6 +123,15 @@ export interface ReportContent {
   id: string; title: string; status: string; classification: string;
   created_at: string | null; content: ReportDoc | null;
 }
+export interface ClaimAuthoritative {
+  source: string; title: string | null; url: string | null; credibility: number | null;
+}
+export interface ClaimVerdict {
+  id: string; narrative_id: string | null; narrative_label: string | null;
+  claim: string; check_worthy: boolean; verdict: string | null;
+  confidence: number | null; veracity: number | null; rationale: string | null;
+  authoritative: ClaimAuthoritative[]; review_status: string | null; created_at: string | null;
+}
 
 // ---- endpoint ----
 export const api = {
@@ -195,6 +204,11 @@ export const api = {
   buildReport: (inv: string) =>
     req<{ report_id: string; cited_sources: number; sections: number }>(
       `/investigations/${inv}/reports/build`, { method: "POST" },
+    ),
+  claims: (inv: string) => req<ClaimVerdict[]>(`/investigations/${inv}/claims`),
+  verifyClaims: (inv: string) =>
+    req<{ claims: number; with_authoritative: number }>(
+      `/investigations/${inv}/claims/verify`, { method: "POST" },
     ),
 };
 

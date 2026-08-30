@@ -16,6 +16,8 @@ from core.events import publish_agent_event
 from core.models import (
     AgentRun,
     Analysis,
+    Claim,
+    ClaimVerdict,
     Collection,
     CollectionRun,
     Comment,
@@ -378,6 +380,129 @@ async def run_report(session: AsyncSession, inv: Investigation) -> dict:
     }
 
 
+# ---------------------------------------------------------------- Graph E (veracity)
+
+def _keywords(text: str, k: int = 6) -> list[str]:
+    """Kata kunci ekstraktif (untuk pencarian ground-truth BPS/BMKG)."""
+    from graphs.llm import _STOP, _WORD
+
+    freq: dict[str, int] = {}
+    for w in _WORD.findall((text or "").lower()):
+        if w not in _STOP and len(w) > 3:
+            freq[w] = freq.get(w, 0) + 1
+    return sorted(freq, key=lambda w: (-freq[w], w))[:k]
+
+
+async def run_verify(session: AsyncSession, inv: Investigation) -> dict:
+    """Jalankan Graph E: klaim narasi → verifikasi vs bukti internal + ground-truth
+    resmi (BPS/BMKG) → verdict DRAF (AVeriTeC) + veracity + kuadran.
+
+    Idempoten: klaim lama investigasi dihapus lalu ditulis ulang."""
+    import asyncio as _asyncio
+
+    from graphs.verify import verifier_graph
+
+    inv_pk = inv.id
+    inv_id = str(inv.id)
+
+    run = AgentRun(investigation_id=inv_pk, graph_name="veracity", status="running")
+    session.add(run)
+    await session.flush()
+    run_id = run.id
+
+    nrows = (await session.execute(
+        select(Narrative.id, Narrative.label, Narrative.summary, NarrativeAssessment.authenticity)
+        .outerjoin(NarrativeAssessment, NarrativeAssessment.narrative_id == Narrative.id)
+        .where(Narrative.investigation_id == inv_pk)
+        .order_by(Narrative.risk_score.desc().nullslast())
+        .limit(8)
+    )).all()
+    nar_ids = [r[0] for r in nrows]
+    evidence_by_nar: dict = {nid: [] for nid in nar_ids}
+    if nar_ids:
+        erows = (await session.execute(
+            select(narrative_evidence.c.narrative_id, Comment.content, Comment.url,
+                   Comment.platform, Comment.published_at)
+            .join(Comment, Comment.id == narrative_evidence.c.comment_id)
+            .where(narrative_evidence.c.narrative_id.in_(nar_ids))
+            .order_by(Comment.published_at.desc().nullslast())
+        )).all()
+        for nid, content, url, platform, published_at in erows:
+            lst = evidence_by_nar.get(nid)
+            if lst is not None and len(lst) < 4:
+                lst.append({"content": content, "url": url, "platform": platform,
+                            "published_at": published_at.isoformat() if published_at else None})
+    narratives = [
+        {"id": str(r[0]), "label": r[1], "summary": r[2],
+         "authenticity": float(r[3]) if r[3] is not None else None,
+         "keywords": _keywords(f"{r[1] or ''} {r[2] or ''}"),
+         "evidence": evidence_by_nar.get(r[0], [])}
+        for r in nrows
+    ]
+
+    await session.commit()  # tutup tx sebelum IO adapter + LLM
+
+    if not narratives:
+        run = await session.get(AgentRun, run_id)
+        run.status = "done"
+        run.ended_at = datetime.now(UTC)
+        await session.commit()
+        return {"agent_run_id": str(run_id), "claims": 0,
+                "note": "Belum ada narasi. Jalankan analisis (Graph C) dulu."}
+
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "veracity",
+        "status": "running", "node": "retrieve_evidence", "detail": "menarik ground-truth resmi",
+    })
+    graph = verifier_graph()
+    init = {"investigation_id": inv_id, "narratives": narratives}
+    result = await _asyncio.to_thread(graph.invoke, init, {})  # LONG (IO+LLM), tanpa tx PG
+    results = result.get("results", [])
+
+    # Tulis ulang klaim + verdict (idempoten) dan update veracity/kuadran narasi.
+    await session.execute(delete(Claim).where(Claim.investigation_id == inv_pk))
+    used_auth = 0
+    for res in results:
+        nid = uuid.UUID(res["narrative_id"]) if res.get("narrative_id") else None
+        claim = Claim(narrative_id=nid, investigation_id=inv_pk,
+                      text_normalized=res["claim"], check_worthy=res["check_worthy"])
+        session.add(claim)
+        await session.flush()
+        session.add(ClaimVerdict(
+            claim_id=claim.id, verdict=res["verdict"], confidence=res.get("confidence"),
+            evidence_refs={"veracity": res.get("veracity"), "rationale": res.get("rationale"),
+                           "authoritative": res.get("authoritative", [])},
+            review_status="draft", model_version="graph-e/llm-F",
+        ))
+        if res.get("authoritative"):
+            used_auth += 1
+        if nid is not None:
+            await session.execute(
+                NarrativeAssessment.__table__.update()
+                .where(NarrativeAssessment.narrative_id == nid)
+                .values(veracity=res.get("veracity"), quadrant=res.get("quadrant"))
+            )
+
+    usage = result.get("usage", {})
+    run = await session.get(AgentRun, run_id)
+    run.tokens_in = usage.get("tokens_in", 0)
+    run.tokens_out = usage.get("tokens_out", 0)
+    run.status = "done"
+    run.ended_at = datetime.now(UTC)
+    await session.commit()
+
+    publish_agent_event({
+        "type": "run", "id": str(run_id), "investigation_id": inv_id, "graph": "veracity",
+        "status": "done", "node": "done",
+        "detail": f"{len(results)} klaim · {used_auth} pakai sumber resmi",
+        "tokens_in": run.tokens_in, "tokens_out": run.tokens_out,
+    })
+    return {
+        "agent_run_id": str(run_id), "claims": len(results),
+        "with_authoritative": used_auth,
+    }
+
+
 def _parse_iso(v: str | None) -> datetime | None:
     if not v:
         return None
@@ -396,4 +521,6 @@ def reset_graph() -> None:
     n._graph = None
 
 
-__all__: list[str] = ["start_plan", "resume_plan", "run_analysis", "run_report", "reset_graph"]
+__all__: list[str] = [
+    "start_plan", "resume_plan", "run_analysis", "run_report", "run_verify", "reset_graph",
+]

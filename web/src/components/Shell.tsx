@@ -16,7 +16,7 @@ const NAV: { section: string; items: { to: string; label: string; icon: IconName
     { to: "/graph", label: "Knowledge Graph", icon: "graph" },
     { to: "/timeline", label: "Timeline", icon: "timeline" },
     { to: "/forensics", label: "Forensik Narasi", icon: "spark" },
-    { to: "/veracity", label: "Verifikasi Klaim", icon: "audit", phase: "F5" },
+    { to: "/veracity", label: "Verifikasi Klaim", icon: "audit" },
     { to: "/reports", label: "Reports", icon: "reports" },
   ]},
   { section: "System", items: [

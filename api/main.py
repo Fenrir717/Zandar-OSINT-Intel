@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from api.routers import (
     analysis,
     auth,
+    claims,
     collections,
     comments,
     graph,
@@ -49,6 +50,7 @@ app.include_router(projects.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
 app.include_router(graph.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(claims.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])
