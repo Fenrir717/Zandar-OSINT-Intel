@@ -72,7 +72,7 @@ export interface SystemService {
 export interface SystemUser {
   id: string; name: string; email: string; role: string; created_at: string | null;
 }
-export interface GraphNode { id: string; label: string; type: string; mentions: number; }
+export interface GraphNode { id: string; label: string; type: string; mentions: number; community: number; }
 export interface GraphEdge { source: string; target: string; weight: number; }
 export interface KnowledgeGraph {
   nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number };

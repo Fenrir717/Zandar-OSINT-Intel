@@ -13,6 +13,8 @@ const TYPE: Record<string, { c: string; label: string }> = {
 };
 const color = (t: string) => TYPE[t]?.c ?? "var(--muted)";
 const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+// palet komunitas (distinct, terbaca di light & dark); komunitas kecil → abu-abu
+const COMM = ["#0E6B62", "#2C6E8F", "#6B4FB0", "#9A6B10", "#2E7D4F", "#B23B32", "#3B7A8C", "#8A5A2B"];
 
 function layout(nodes: GraphNode[], edges: GraphEdge[]): Record<string, { x: number; y: number }> {
   const N = nodes.length || 1;
@@ -60,7 +62,9 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
   const [note, setNote] = useState("");
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("all");
+  const [colorMode, setColorMode] = useState<"type" | "community">("type");
   const [sel, setSel] = useState<string | null>(null);
+  const [selComm, setSelComm] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [expanded, setExpanded] = useState(false);
@@ -117,16 +121,33 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
     for (const e of data.edges) { if (e.source === sel) s.add(e.target); if (e.target === sel) s.add(e.source); }
     return s;
   }, [sel, data]);
+  const commColorMap = useMemo(() => {
+    const size = new Map<number, number>();
+    (data?.nodes || []).forEach((n) => size.set(n.community, (size.get(n.community) || 0) + 1));
+    const ranked = [...size.entries()].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]);
+    const m: Record<number, string> = {};
+    ranked.forEach(([cid], i) => { m[cid] = i < COMM.length ? COMM[i] : "var(--muted)"; });
+    return m;
+  }, [data]);
+  const commList = useMemo(() => {
+    const g = new Map<number, GraphNode[]>();
+    (data?.nodes || []).forEach((n) => { const a = g.get(n.community) || []; a.push(n); g.set(n.community, a); });
+    return [...g.entries()].filter(([, ns]) => ns.length >= 2)
+      .map(([cid, ns]) => ({ cid, nodes: [...ns].sort((a, b) => b.mentions - a.mentions) }))
+      .sort((a, b) => b.nodes.length - a.nodes.length).slice(0, 8);
+  }, [data]);
+  const nodeColor = (n: GraphNode) => (colorMode === "community" ? (commColorMap[n.community] ?? "var(--muted)") : color(n.type));
   const emph = useMemo(() => {
     const s = new Set<string>();
     if (!data) return s;
     if (sel) { neighbors?.forEach((id) => s.add(id)); return s; }
+    if (selComm != null) { for (const n of data.nodes) if (n.community === selComm) s.add(n.id); return s; }
     const qq = q.trim().toLowerCase();
     for (const n of data.nodes)
       if ((typeF === "all" || n.type === typeF) && (!qq || n.label.toLowerCase().includes(qq))) s.add(n.id);
     return s;
-  }, [data, sel, neighbors, q, typeF]);
-  const filtering = Boolean(sel || q.trim() || typeF !== "all");
+  }, [data, sel, neighbors, selComm, q, typeF]);
+  const filtering = Boolean(sel || selComm != null || q.trim() || typeF !== "all");
 
   function onDown(e: React.PointerEvent) {
     drag.current = { mx: e.clientX, my: e.clientY, px: pan.x, py: pan.y, moved: false };
@@ -141,7 +162,7 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
   }
   function onUp() {
     const moved = drag.current?.moved; drag.current = null;
-    if (!moved) setSel(null); // klik latar → lepas pilihan
+    if (!moved) { setSel(null); setSelComm(null); } // klik latar → lepas pilihan
   }
   const toggleExpand = () => setExpanded((v) => !v);
   const selNode = sel ? byId[sel] : null;
@@ -179,13 +200,13 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
             {(data?.nodes || []).map((n) => {
               const p = pos[n.id]; if (!p) return null;
               const r = 15 + (n.mentions / maxM) * 22;
-              const c = color(n.type);
+              const c = nodeColor(n);
               const on = emph.has(n.id);
               const isSel = sel === n.id;
               return (
                 <g key={n.id} opacity={on ? 1 : 0.16} style={{ transition: "opacity .2s", cursor: "pointer" }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); setSel(isSel ? null : n.id); }}>
+                  onClick={(e) => { e.stopPropagation(); setSelComm(null); setSel(isSel ? null : n.id); }}>
                   {isSel && <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={c} strokeOpacity={0.35} strokeWidth={2.5} />}
                   <circle cx={p.x} cy={p.y} r={r} fill={c} fillOpacity={0.16} stroke={c} strokeWidth={isSel ? 3 : 2} />
                   <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(15, r * 0.85)} fontWeight={700} fill={c} style={{ pointerEvents: "none" }}>{n.mentions}</text>
@@ -225,6 +246,16 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
               <option value="organization">Organisasi</option>
               <option value="location">Lokasi</option>
             </select>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["type", "community"] as const).map((m) => (
+                <button key={m} onClick={() => { setColorMode(m); setSelComm(null); }} className="btn" style={{
+                  flex: 1, fontSize: 12, padding: "7px 8px",
+                  borderColor: colorMode === m ? "var(--accent)" : "var(--line)",
+                  background: colorMode === m ? "var(--accent-soft)" : "var(--surface)",
+                  color: colorMode === m ? "var(--accent-ink)" : "var(--ink)",
+                }}>{m === "type" ? "Warna: Tipe" : "Komunitas"}</button>
+              ))}
+            </div>
           </Card>
 
           {selNode ? (
@@ -240,6 +271,24 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
                 <Pill tone="info">{selDeg} koneksi</Pill>
               </div>
               <button className="btn btn-ghost" style={{ marginTop: 10, width: "100%" }} onClick={() => setSel(null)}>Lepas pilihan</button>
+            </Card>
+          ) : colorMode === "community" ? (
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, marginBottom: 10 }}>Komunitas ({commList.length})</div>
+              {commList.length === 0 ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Tak ada komunitas (perlu ko-okurensi antar-entitas).</div>
+                : commList.map(({ cid, nodes: ns }) => {
+                  const on = selComm === cid;
+                  return (
+                    <button key={cid} onClick={() => { setSel(null); setSelComm(on ? null : cid); }}
+                      style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "7px 8px", borderRadius: 8, border: "1px solid", borderColor: on ? "var(--accent)" : "transparent", background: on ? "var(--accent-soft)" : "transparent", cursor: "pointer", marginBottom: 2 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: commColorMap[cid] ?? "var(--muted)", flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", color: "var(--ink)" }}>{ns[0].label}{ns.length > 1 ? ` +${ns.length - 1}` : ""}</span>
+                        <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{ns.length} entitas</span>
+                      </span>
+                    </button>
+                  );
+                })}
             </Card>
           ) : (
             <Card style={{ padding: 14 }}>

@@ -7,6 +7,7 @@ yang muncul di komentar sama. Neo4j = indeks turunan (bisa dibangun ulang dari k
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 from itertools import combinations
 
 from core.config import get_settings
@@ -90,6 +91,37 @@ def _resolve(
     return fnodes, fpairs
 
 
+def detect_communities(keys: set[str], pairs: dict[tuple[str, str], int]) -> dict[str, int]:
+    """Deteksi komunitas via label-propagation BERBOBOT (tanpa dependensi).
+
+    Tiap node awalnya label unik; iteratif mengadopsi label dgn total bobot tetangga
+    terbesar (tie → label terkecil, deterministik). Komunitas dinomori ulang per ukuran
+    (0 = terbesar). Node tanpa tetangga → komunitas singleton sendiri.
+    """
+    adj: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for (a, b), w in pairs.items():
+        adj[a].append((b, w))
+        adj[b].append((a, w))
+    order = sorted(keys)
+    label = {k: i for i, k in enumerate(order)}
+    for _ in range(30):
+        changed = False
+        for k in order:
+            if not adj[k]:
+                continue
+            tally: dict[int, int] = defaultdict(int)
+            for nb, w in adj[k]:
+                tally[label[nb]] += w
+            best = min(tally.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+            if label[k] != best:
+                label[k] = best
+                changed = True
+        if not changed:
+            break
+    ranked = {old: new for new, (old, _) in enumerate(Counter(label.values()).most_common())}
+    return {k: ranked[v] for k, v in label.items()}
+
+
 def clear_graph(inv: str) -> None:
     with driver().session() as sess:
         sess.run("MATCH (n:Entity {inv:$inv}) DETACH DELETE n", inv=inv)
@@ -115,12 +147,16 @@ def write_graph(inv: str, per_comment: list[list]) -> dict:
             pairs[(a, b)] = pairs.get((a, b), 0) + 1
 
     nodes, pairs = _resolve(nodes, pairs)  # resolusi entitas (gabung varian/duplikat)
+    comm = detect_communities(set(nodes), pairs)  # deteksi komunitas (CIB)
+    for k, n in nodes.items():
+        n["community"] = comm.get(k, 0)
+
     clear_graph(inv)
     with driver().session() as sess:
         if nodes:
             sess.run(
                 "UNWIND $rows AS r MERGE (n:Entity {inv:$inv, key:r.key}) "
-                "SET n.name=r.name, n.type=r.type, n.mentions=r.mentions",
+                "SET n.name=r.name, n.type=r.type, n.mentions=r.mentions, n.community=r.community",
                 inv=inv, rows=list(nodes.values()),
             )
         if pairs:
@@ -131,15 +167,15 @@ def write_graph(inv: str, per_comment: list[list]) -> dict:
                 "MERGE (a)-[e:CO_OCCURS]->(b) SET e.count=r.count",
                 inv=inv, rows=edge_rows,
             )
-    return {"nodes": len(nodes), "edges": len(pairs)}
+    return {"nodes": len(nodes), "edges": len(pairs), "communities": len(set(comm.values()))}
 
 
 def read_graph(inv: str, node_limit: int = 60, edge_limit: int = 160) -> dict:
-    """Kembalikan {nodes:[{id,label,type,mentions}], edges:[{source,target,weight}]}."""
+    """Kembalikan {nodes:[{id,label,type,mentions,community}], edges:[{source,target,weight}]}."""
     with driver().session() as sess:
         nrows = sess.run(
             "MATCH (n:Entity {inv:$inv}) RETURN n.key AS key, n.name AS name, n.type AS type, "
-            "n.mentions AS mentions ORDER BY n.mentions DESC LIMIT $lim",
+            "n.mentions AS mentions, n.community AS community ORDER BY n.mentions DESC LIMIT $lim",
             inv=inv, lim=node_limit,
         ).data()
         keep = {r["key"] for r in nrows}
@@ -148,7 +184,8 @@ def read_graph(inv: str, node_limit: int = 60, edge_limit: int = 160) -> dict:
             "RETURN a.key AS source, b.key AS target, e.count AS weight ORDER BY e.count DESC LIMIT $lim",
             inv=inv, lim=edge_limit,
         ).data()
-    nodes = [{"id": r["key"], "label": r["name"], "type": r["type"], "mentions": r["mentions"]} for r in nrows]
+    nodes = [{"id": r["key"], "label": r["name"], "type": r["type"], "mentions": r["mentions"],
+              "community": r["community"] if r["community"] is not None else 0} for r in nrows]
     edges = [e for e in erows if e["source"] in keep and e["target"] in keep]
     return {"nodes": nodes, "edges": edges}
 
