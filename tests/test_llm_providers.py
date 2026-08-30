@@ -54,7 +54,7 @@ def test_openai_compat_call(monkeypatch) -> None:
     assert r.tokens_in == 42 and r.tokens_out == 12
     assert captured["temperature"] == 0
     assert "groq.com" in captured["url"]
-    assert captured["model"] == "llama-3.3-70b-versatile"  # default Tier R groq
+    assert captured["model"] == "openai/gpt-oss-120b"  # default Tier R groq (2026)
     get_settings.cache_clear()
 
 

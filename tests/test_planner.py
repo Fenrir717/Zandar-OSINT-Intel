@@ -2,10 +2,25 @@
 Memakai provider LLM stub + graph fresh per test (MemorySaver bersih). Tanpa DB.
 """
 
+import pytest
 from langgraph.types import Command
 
 from graphs.llm import StubProvider
 from graphs.planner import _node_estimate_cost, build_planner
+
+
+@pytest.fixture(autouse=True)
+def _force_stub(monkeypatch):
+    """Isolasi: paksa provider stub apa pun isi .env (mesin dev bisa set groq)."""
+    from core.config import get_settings
+    from graphs.llm import reset_llm
+
+    monkeypatch.setenv("LLM_PROVIDER", "stub")
+    get_settings.cache_clear()
+    reset_llm()
+    yield
+    get_settings.cache_clear()
+    reset_llm()
 
 
 def _run_to_interrupt(query: str, budget: float | None = 25.0):
