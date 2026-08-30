@@ -186,7 +186,7 @@ function NewCollectionModal({ investigationId, onClose, onCreated }: {
       <Field label="Platform / sumber" hint="Sumber data untuk job pengumpulan ini.">
         {adapters.length ? (
           <select className="select" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-            {adapters.map((a) => (
+            {[...new Map(adapters.map((a) => [a.platform, a])).values()].map((a) => (
               <option key={a.platform} value={a.platform}>
                 {a.platform}{a.requires_credentials ? " — perlu kredensial" : ""}
               </option>
