@@ -128,28 +128,34 @@ def classify_investigation(
 async def _classify(investigation_id: str, batch_size: int, reclassify: bool = False) -> dict:
     clf = get_classifier()
     analyzed = 0
-    seen: set = set()  # saat reclassify, hindari loop tak henti (upsert tak mengurangi kandidat)
-    async with worker_session() as session:
-        while True:
-            stmt = select(Comment.id, Comment.content).where(
-                Comment.investigation_id == uuid.UUID(investigation_id)
-            )
-            if reclassify:
-                if seen:
-                    stmt = stmt.where(Comment.id.notin_(seen))
-            else:
+    inv = uuid.UUID(investigation_id)
+    seen: set = set()  # id yang sudah diproses — cegah loop tak henti (upsert tak kurangi kandidat)
+
+    while True:
+        # Fase 1 — baca batch (transaksi PENDEK, langsung ditutup).
+        async with worker_session() as session:
+            stmt = select(Comment.id, Comment.content).where(Comment.investigation_id == inv)
+            if not reclassify:
                 stmt = stmt.outerjoin(Analysis, Analysis.comment_id == Comment.id).where(
                     Analysis.comment_id.is_(None)
                 )
+            if seen:
+                stmt = stmt.where(Comment.id.notin_(seen))
             rows = (await session.execute(stmt.limit(batch_size))).all()
-            if not rows:
-                break
+        if not rows:
+            break
 
-            raw_texts = [content for _, content in rows]
-            pre_texts = [preprocess_for_classify(t) for t in raw_texts]  # slang/emoji → baku
-            labels = clf.classify(pre_texts)
-            refine_low_confidence(raw_texts, labels)  # sarkasme: pakai teks ASLI, low-conf saja
-            now = datetime.now(UTC)
+        # Fase 2 — klasifikasi + refine TANPA koneksi DB terbuka. refine sarkasme
+        # (LLM per-item) bisa makan menit; menahan koneksi di sini memicu
+        # idle_in_transaction_session_timeout → "connection closed" saat menulis.
+        raw_texts = [content for _, content in rows]
+        pre_texts = [preprocess_for_classify(t) for t in raw_texts]  # slang/emoji → baku
+        labels = clf.classify(pre_texts)
+        refine_low_confidence(raw_texts, labels)  # sarkasme: pakai teks ASLI, low-conf saja
+
+        # Fase 3 — tulis hasil (transaksi PENDEK, koneksi segar).
+        now = datetime.now(UTC)
+        async with worker_session() as session:
             for (cid, _), lab in zip(rows, labels, strict=True):
                 values = dict(
                     comment_id=cid, sentiment=lab.sentiment, sentiment_score=lab.sentiment_score,
@@ -163,12 +169,14 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
                         index_elements=["comment_id"],
                         set_={k: values[k] for k in values if k != "comment_id"},
                     )
-                    seen.add(cid)
                 else:
                     stmt2 = ins.on_conflict_do_nothing(index_elements=["comment_id"])
                 await session.execute(stmt2)
-                analyzed += 1
             await session.commit()
+
+        for cid, _ in rows:
+            seen.add(cid)
+        analyzed += len(rows)
 
     return {"investigation_id": investigation_id, "analyzed": analyzed, "model": clf.version}
 
