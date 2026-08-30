@@ -180,11 +180,24 @@ leksikon untuk emosi/intent/toksisitas. Model diunduh sekali dari HuggingFace (~
 pip install torch --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
 ```
 
-Bandingkan provider pada data nyata (preview bake-off):
+Bandingkan provider pada data nyata (kesepakatan):
 
 ```bash
 python scripts/classifier_compare.py --a lexicon --b indobert --limit 300
 ```
+
+### Evaluasi akurasi terhadap gold set (bake-off, PRD §7.4)
+
+Gold set = **NusaX-Senti** (sentimen Indonesia berlabel manusia, IndoNLP) — diunduh
+otomatis dari GitHub, tanpa pelabelan manual. Gate: F1 makro sentimen ≥ 0.82.
+
+```bash
+python scripts/eval_classifier.py --provider lexicon indobert
+```
+
+Hasil terukur (NusaX test, 400 kalimat): **IndoBERT macro-F1 0.894 (LULUS)** vs
+**lexicon 0.541 (gagal)**. Leksikon = baseline agar backend jalan; IndoBERT = jalur
+produksi tervalidasi.
 
 ## Observability (opsional)
 
