@@ -72,7 +72,14 @@ export interface SystemService {
 export interface SystemUser {
   id: string; name: string; email: string; role: string; created_at: string | null;
 }
-export interface GraphNode { id: string; label: string; type: string; mentions: number; community: number; }
+export interface GraphNode {
+  id: string; label: string; type: string; mentions: number; community: number;
+  pos?: number; neg?: number; neu?: number; sent_score?: number | null; emotion?: string | null;
+}
+export interface EntitySentiment {
+  name: string; type: string; mentions: number;
+  pos: number; neg: number; neu: number; sent_score: number | null; emotion: string | null;
+}
 export interface GraphEdge { source: string; target: string; weight: number; }
 export interface KnowledgeGraph {
   nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number };
@@ -193,6 +200,7 @@ export const api = {
   narratives: (inv: string) => req<Narrative[]>(`/investigations/${inv}/narratives`),
   narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
+  entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   systemStatus: () => req<SystemService[]>("/system/status"),
   systemUsers: () => req<SystemUser[]>("/system/users"),
   graphData: (inv: string) => req<KnowledgeGraph>(`/investigations/${inv}/graph`),

@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type Evidence, type Narrative } from "../lib/api";
+import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -23,6 +23,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const { list, selected, choose } = useInvestigations();
   const [stats, setStats] = useState<AnalysisStats | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
+  const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -34,9 +35,13 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n] = await Promise.all([api.analysisStats(selected), api.narratives(selected).catch(() => [])]);
-      setStats(s); setNars(n);
-    } catch { setStats(null); setNars([]); }
+      const [s, n, e] = await Promise.all([
+        api.analysisStats(selected),
+        api.narratives(selected).catch(() => []),
+        api.entities(selected).catch(() => []),
+      ]);
+      setStats(s); setNars(n); setEnts(e);
+    } catch { setStats(null); setNars([]); setEnts([]); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -141,10 +146,70 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
             </ChartCard>
           </div>
 
+          <TargetSentiment ents={ents} />
+
           <NarrativesCard nars={nars} />
         </div>
       )}
     </div>
+  );
+}
+
+const ETYPE_LABEL: Record<string, string> = {
+  person: "Tokoh", organization: "Institusi", location: "Lokasi", misc: "Lainnya",
+};
+const EMO_LABEL: Record<string, string> = {
+  anger: "Marah", fear: "Takut", joy: "Senang", sadness: "Sedih",
+  trust: "Percaya", surprise: "Terkejut", disgust: "Jijik", neutral: "Netral",
+};
+const scoreTone = (s: number | null) =>
+  (s == null ? "muted" : s > 0.1 ? "ok" : s < -0.1 ? "crit" : "muted") as "ok" | "crit" | "muted";
+
+function TargetSentiment({ ents }: { ents: EntitySentiment[] }) {
+  if (ents.length === 0) return null;
+  const withSent = ents.filter((e) => e.pos + e.neg + e.neu > 0);
+  const shown = withSent.slice(0, 12);
+  return (
+    <Card className="rise" style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="target" size={16} /></span>Sentimen per Target
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>
+          {shown.length ? `${shown.length} entitas · dari knowledge graph` : "perlu bangun graph"}
+        </span>
+      </div>
+      {withSent.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55, padding: "6px 0" }}>
+          Entitas belum bermuatan sentimen. Buka <b>Knowledge Graph</b> lalu <b>bangun ulang</b> graph
+          (setelah analisis) agar sentimen tiap komentar tertaut ke target yang disebutnya.
+        </div>
+      ) : (
+        <div className="scroll-x">
+          <div style={{ minWidth: 560, display: "flex", flexDirection: "column" }}>
+            {shown.map((e, i) => {
+              const total = e.pos + e.neg + e.neu || 1;
+              const pp = (e.pos / total) * 100, up = (e.neu / total) * 100, npr = (e.neg / total) * 100;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < shown.length - 1 ? "1px solid var(--line-2)" : "none" }}>
+                  <div style={{ flex: "1 1 190px", minWidth: 150, display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</span>
+                    <Pill tone="muted">{ETYPE_LABEL[e.type] || e.type}</Pill>
+                  </div>
+                  <div title={`${e.pos} positif · ${e.neu} netral · ${e.neg} negatif`}
+                    style={{ display: "flex", width: 150, height: 9, borderRadius: 5, overflow: "hidden", background: "var(--surface-2)", flexShrink: 0 }}>
+                    <span style={{ width: `${pp}%`, background: "var(--ok)" }} />
+                    <span style={{ width: `${up}%`, background: "var(--line)" }} />
+                    <span style={{ width: `${npr}%`, background: "var(--crit)" }} />
+                  </div>
+                  <span className="hide-sm" style={{ fontSize: 11, color: "var(--muted)", width: 62, textAlign: "right", flexShrink: 0 }}>{e.emotion ? EMO_LABEL[e.emotion] || e.emotion : "–"}</span>
+                  <span className="tnum" style={{ fontSize: 11, color: "var(--faint)", width: 56, textAlign: "right", flexShrink: 0 }}>{e.mentions} sebut</span>
+                  <Pill tone={scoreTone(e.sent_score)} dot>{e.sent_score != null ? e.sent_score.toFixed(2) : "–"}</Pill>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

@@ -121,3 +121,21 @@ async def analysis_stats(
         "low_confidence": low_conf or 0,
         "sentiment_trend": trend,
     }
+
+
+@router.get("/{investigation_id}/entities")
+async def entity_sentiment(
+    investigation_id: uuid.UUID, user: CurrentUser, limit: int = 20
+) -> list[dict]:
+    """Sentimen per-target-entitas (Tier 2) — dari knowledge graph Neo4j.
+
+    Butuh graph sudah dibangun (build_graph) SETELAH klasifikasi agar tiap entitas
+    membawa agregat sentimen komentar yang menyebutnya."""
+    import asyncio
+
+    from core import graph
+
+    try:
+        return await asyncio.to_thread(graph.read_entities, str(investigation_id), limit)
+    except Exception:  # noqa: BLE001 — Neo4j mati / graph belum dibangun → kosong
+        return []

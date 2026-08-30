@@ -240,22 +240,29 @@ def build_graph(self, investigation_id: str, batch_size: int = 500) -> dict:
 async def _build_graph(investigation_id: str, batch_size: int) -> dict:
     async with worker_session() as session:
         rows = (await session.execute(
-            select(Comment.content).where(Comment.investigation_id == uuid.UUID(investigation_id))
+            select(Comment.content, Analysis.sentiment, Analysis.sentiment_score, Analysis.emotion)
+            .outerjoin(Analysis, Analysis.comment_id == Comment.id)
+            .where(Comment.investigation_id == uuid.UUID(investigation_id))
         )).all()
     texts = [r[0] for r in rows]
     if not texts:
         return {"investigation_id": investigation_id, "nodes": 0, "edges": 0, "note": "belum ada komentar"}
-    res = await asyncio.to_thread(_ner_and_write, investigation_id, texts)
+    # Sentimen per komentar (sejajar texts) → ditautkan ke entitas (Tier 2).
+    sentiments = [
+        {"sentiment": r[1], "score": float(r[2]) if r[2] is not None else None, "emotion": r[3]}
+        for r in rows
+    ]
+    res = await asyncio.to_thread(_ner_and_write, investigation_id, texts, sentiments)
     return {"investigation_id": investigation_id, "comments": len(texts), **res}
 
 
-def _ner_and_write(inv_id: str, texts: list[str]) -> dict:
+def _ner_and_write(inv_id: str, texts: list[str], sentiments: list[dict] | None = None) -> dict:
     """NER + tulis Neo4j — sinkron, dijalankan dalam thread (CPU-bound + driver sync)."""
     from core import graph
     from workers.ner import get_ner
 
     ents = get_ner().extract(texts)
-    return graph.write_graph(inv_id, ents)
+    return graph.write_graph(inv_id, ents, sentiments)
 
 
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:
