@@ -46,7 +46,7 @@
   --sh-lg: 0 8px 16px rgba(16,40,45,.08), 0 24px 48px rgba(16,40,45,.10);
   --shadow: var(--sh-sm); /* kompat lama */
 
-  --font-ui: "Archivo", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-ui: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --radius: 12px;

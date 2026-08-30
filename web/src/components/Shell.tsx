@@ -6,27 +6,35 @@ import { Icon, type IconName } from "./icons";
 const NAV: { section: string; items: { to: string; label: string; icon: IconName; phase?: string }[] }[] = [
   { section: "Overview", items: [
     { to: "/", label: "Dashboard", icon: "dashboard" },
+    { to: "/projects", label: "Projects", icon: "projects" },
     { to: "/investigations", label: "Investigations", icon: "search" },
   ]},
   { section: "Intelligence", items: [
     { to: "/collections", label: "Collections", icon: "collections" },
     { to: "/explorer", label: "Comment Explorer", icon: "comment" },
-    { to: "/analysis", label: "AI Analysis", icon: "analysis", phase: "F2" },
+    { to: "/analysis", label: "AI Analysis", icon: "analysis" },
     { to: "/graph", label: "Knowledge Graph", icon: "graph", phase: "F3" },
+    { to: "/timeline", label: "Timeline", icon: "timeline" },
     { to: "/forensics", label: "Forensik Narasi", icon: "spark", phase: "F3" },
     { to: "/veracity", label: "Verifikasi Klaim", icon: "audit", phase: "F5" },
     { to: "/reports", label: "Reports", icon: "reports", phase: "F4" },
   ]},
   { section: "System", items: [
-    { to: "/agents", label: "Agent Monitor", icon: "agents", phase: "F2" },
-    { to: "/settings", label: "Settings", icon: "settings", phase: "—" },
+    { to: "/agents", label: "Agent Monitor", icon: "agents" },
+    { to: "/settings", label: "Settings", icon: "settings" },
   ]},
 ];
 
 const SUBTITLE: Record<string, string> = {
   "/": "Ikhtisar investigasi aktif, pipeline koleksi, dan status analisis AI.",
+  "/projects": "Kelola project investigasi dan tingkat klasifikasi.",
+  "/investigations": "Buat & kelola investigasi OSINT dengan sumber & pipeline analisis.",
+  "/collections": "Pantau job koleksi, status antrean, dan performa kolektor.",
   "/explorer": "Telusuri & analisis komentar publik lintas platform dengan tag sentimen.",
   "/analysis": "Distribusi sentimen, emosi, intent, topik — dari klasifikasi IndoBERT lokal.",
+  "/graph": "Graf entitas, relasi, dan komunitas hasil investigasi.",
+  "/timeline": "Urutan kronologis kejadian, publikasi, dan aktivitas agen.",
+  "/reports": "Ringkasan intelijen ber-sitasi dari narasi & analisis.",
   "/agents": "Pemantauan run agen LangGraph secara real-time — node, token, biaya.",
 };
 

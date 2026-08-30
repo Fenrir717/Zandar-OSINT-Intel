@@ -101,6 +101,16 @@ export function Spinner({ size = 16 }: { size?: number }) {
   );
 }
 
+// Banner JUJUR untuk halaman yang memakai data contoh / fitur fase berikutnya.
+export function PreviewBanner({ phase, children }: { phase: string; children?: ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: "var(--radius-sm)", background: "var(--warn-soft)", border: "1px solid var(--warn)", color: "var(--warn-ink)", fontSize: 12.5, marginBottom: 16 }}>
+      <Icon name="spark" size={15} style={{ flexShrink: 0 }} />
+      <span><b>Pratinjau {phase}</b>{children ? " — " : ""}{children}</span>
+    </div>
+  );
+}
+
 export function SectionTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

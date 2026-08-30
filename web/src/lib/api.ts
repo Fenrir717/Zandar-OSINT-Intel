@@ -63,6 +63,9 @@ export interface AdapterInfo {
   platform: string; tier: string; requires_credentials: boolean;
   rate_note: string; cost_note: string; legal_note: string;
 }
+export interface Project {
+  id: string; name: string; created_at: string | null; investigation_count: number;
+}
 export interface AgentRun {
   id: string; graph_name: string; status: string; tokens_in: number;
   tokens_out: number; cost_usd: number; started_at: string | null; ended_at: string | null;
@@ -105,6 +108,7 @@ export const api = {
   },
   me: () => req<User>("/auth/me"),
   investigations: () => req<Investigation[]>("/investigations"),
+  projects: () => req<Project[]>("/projects"),
   commentStats: (inv: string) => req<CommentStats>(`/comments/stats?investigation_id=${inv}`),
   searchComments: (params: Record<string, string>) =>
     req<Comment[]>("/comments/search?" + new URLSearchParams(params).toString()),

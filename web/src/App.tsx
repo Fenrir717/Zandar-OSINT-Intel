@@ -1,20 +1,26 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, auth, type User } from "./lib/api";
 import { Shell } from "./components/Shell";
 import { Login } from "./pages/Login";
+import { Dashboard } from "./pages/Dashboard";
 import { CommentExplorer } from "./pages/CommentExplorer";
 import { AgentMonitor } from "./pages/AgentMonitor";
+import { AIAnalysis } from "./pages/AIAnalysis";
+import { Investigations } from "./pages/Investigations";
+import { Projects } from "./pages/Projects";
+import { Collections } from "./pages/Collections";
+import { Timeline } from "./pages/Timeline";
+import { KnowledgeGraph } from "./pages/KnowledgeGraph";
+import { Reports } from "./pages/Reports";
 import { Placeholder } from "./pages/Placeholder";
 
-// Code-split: recharts (berat) hanya dimuat saat membuka AI Analysis
-const AIAnalysis = lazy(() => import("./pages/AIAnalysis").then((m) => ({ default: m.AIAnalysis })));
-
 const TITLES: Record<string, string> = {
-  "/": "Dashboard", "/investigations": "Investigations", "/collections": "Collections",
-  "/explorer": "Comment Explorer", "/analysis": "AI Analysis", "/graph": "Knowledge Graph",
-  "/forensics": "Forensik Narasi", "/veracity": "Verifikasi Klaim", "/reports": "Reports",
-  "/agents": "Agent Monitor", "/settings": "Settings",
+  "/": "Dashboard", "/projects": "Projects", "/investigations": "Investigations",
+  "/collections": "Collections", "/explorer": "Comment Explorer", "/analysis": "AI Analysis",
+  "/graph": "Knowledge Graph", "/timeline": "Timeline", "/forensics": "Forensik Narasi",
+  "/veracity": "Verifikasi Klaim", "/reports": "Reports", "/agents": "Agent Monitor",
+  "/settings": "Settings",
 };
 
 export default function App() {
@@ -41,19 +47,21 @@ export default function App() {
   return (
     <Shell user={user} onLogout={logout} title={title} right={headerRight}>
       <Routes>
-        <Route path="/explorer" element={<CommentExplorer headerSlot={setHeaderRight} />} />
-        <Route path="/" element={<Placeholder title="Dashboard" phase="Fase 2" desc="Ringkasan investigasi aktif, aktivitas koleksi, distribusi sentimen, budget LLM. Menyusul setelah pipeline analisis Fase 2." />} />
-        <Route path="/investigations" element={<Placeholder title="Investigations" phase="Fase 1→2" desc="Daftar & pembuatan investigasi dengan tipe target dan data_policy. Backend sudah ada (CRUD + audit); UI menyusul." />} />
-        <Route path="/collections" element={<Placeholder title="Collections" phase="Fase 1" desc="Kelola sumber & jadwal koleksi (11 adapter, cron). Backend + worker/beat sudah jalan; UI daftar menyusul. Sementara lihat Riwayat Koleksi di Comment Explorer." />} />
-        <Route path="/analysis" element={<Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Memuat…</div>}><AIAnalysis headerSlot={setHeaderRight} /></Suspense>} />
-        <Route path="/graph" element={<Placeholder title="Knowledge Graph" phase="Fase 3" desc="Graf entitas & relasi interaktif, highlight komunitas CIB (Neo4j GDS)." />} />
-        <Route path="/forensics" element={<Placeholder title="Forensik Narasi" phase="Fase 3" desc="Matriks kuadran Otentisitas × Kebenaran, skor ABC+D, peta TTP DISARM." />} />
-        <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />
-        <Route path="/reports" element={<Placeholder title="Reports" phase="Fase 4" desc="Laporan intelijen ber-sitasi (Graph D), ekspor PDF, label klasifikasi." />} />
-        <Route path="/agents" element={<AgentMonitor headerSlot={setHeaderRight} />} />
-        <Route path="/settings" element={<Placeholder title="Settings" phase="—" desc="Konfigurasi platform: provider LLM & embedding, kredensial sumber, kebijakan data (UU PDP), tema. Sebagian dikelola via .env; UI menyusul." />} />
-        <Route path="*" element={<Navigate to="/explorer" replace />} />
-      </Routes>
+          <Route path="/" element={<Dashboard headerSlot={setHeaderRight} />} />
+          <Route path="/projects" element={<Projects headerSlot={setHeaderRight} />} />
+          <Route path="/investigations" element={<Investigations headerSlot={setHeaderRight} />} />
+          <Route path="/collections" element={<Collections headerSlot={setHeaderRight} />} />
+          <Route path="/explorer" element={<CommentExplorer headerSlot={setHeaderRight} />} />
+          <Route path="/analysis" element={<AIAnalysis headerSlot={setHeaderRight} />} />
+          <Route path="/graph" element={<KnowledgeGraph headerSlot={setHeaderRight} />} />
+          <Route path="/timeline" element={<Timeline headerSlot={setHeaderRight} />} />
+          <Route path="/reports" element={<Reports headerSlot={setHeaderRight} />} />
+          <Route path="/agents" element={<AgentMonitor headerSlot={setHeaderRight} />} />
+          <Route path="/forensics" element={<Placeholder title="Forensik Narasi" phase="Fase 3" desc="Matriks kuadran Otentisitas × Kebenaran, skor ABC+D, peta TTP DISARM." />} />
+          <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />
+          <Route path="/settings" element={<Placeholder title="Settings" phase="—" desc="Konfigurasi platform: provider LLM & embedding, kredensial sumber, kebijakan data (UU PDP), tema. Sebagian dikelola via .env; UI menyusul." />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
     </Shell>
   );
 }
