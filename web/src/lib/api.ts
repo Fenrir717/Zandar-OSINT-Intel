@@ -47,6 +47,8 @@ export interface Investigation {
 export interface Comment {
   id: string; investigation_id: string; platform: string; author_hash: string;
   content: string; lang: string | null; url: string | null; published_at: string | null;
+  sentiment?: string | null; sentiment_score?: number | null;
+  confidence?: number | null; is_sarcasm?: boolean;
 }
 export interface CommentStats {
   total: number; by_platform: Record<string, number>; by_lang: Record<string, number>;
