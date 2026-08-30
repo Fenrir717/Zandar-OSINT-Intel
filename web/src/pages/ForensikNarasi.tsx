@@ -5,7 +5,7 @@ import type { TooltipProps } from "recharts";
 import {
   Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
-import { api, type Narrative } from "../lib/api";
+import { api, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Card, Empty, Pill, ProgressBar, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -126,40 +126,123 @@ function ScatterTip({ active, payload }: TooltipProps<number, string>) {
   );
 }
 
+const ABCD: { k: string; name: string; desc: string }[] = [
+  { k: "A", name: "Aktor", desc: "Actors — seberapa terpusat/berulang pelaku di balik narasi" },
+  { k: "B", name: "Perilaku", desc: "Behavior — pola penyebaran (ledakan/burst, sinkronisasi)" },
+  { k: "C", name: "Konten", desc: "Content — muatan negatif/toksik/manipulatif" },
+  { k: "D", name: "Distribusi", desc: "Distribution — jangkauan lintas platform/kanal" },
+];
+
 function NarrativeList({ nars }: { nars: Narrative[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [ev, setEv] = useState<Record<string, Evidence[]>>({});
+  const [busy, setBusy] = useState<string | null>(null);
   if (nars.length === 0) return null;
+
+  async function toggle(id: string) {
+    if (open === id) { setOpen(null); return; }
+    setOpen(id);
+    if (!ev[id]) {
+      setBusy(id);
+      try { const e = await api.narrativeEvidence(id); setEv((m) => ({ ...m, [id]: e })); }
+      catch { setEv((m) => ({ ...m, [id]: [] })); }
+      finally { setBusy(null); }
+    }
+  }
+
   return (
     <Card className="rise" style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: 13.5, fontWeight: 600 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 13.5, fontWeight: 600 }}>
         <span style={{ color: "var(--accent)" }}><Icon name="audit" size={16} /></span>Rincian Narasi (ABC+D)
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>{nars.length} narasi · diurutkan risiko</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>{nars.length} narasi · klik untuk bukti + sumber</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 14px", marginBottom: 12 }}>
+        {ABCD.map((x) => (
+          <span key={x.k} title={x.desc} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)", cursor: "help" }}>
+            <b style={{ color: "var(--ink)" }}>{x.k}</b>{x.name}
+          </span>
+        ))}
       </div>
       <div className="scroll-x">
         <div style={{ minWidth: 720, display: "flex", flexDirection: "column" }}>
           {nars.map((n, i) => {
             const a = n.assessment;
+            const isOpen = open === n.id;
             return (
-              <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderBottom: i < nars.length - 1 ? "1px solid var(--line-2)" : "none" }}>
-                <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
-                <div style={{ flex: "1 1 220px", minWidth: 160 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
-                  {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
-                </div>
-                <MiniBar label="A" value={a?.actors ?? null} tone="info" />
-                <MiniBar label="B" value={a?.behavior ?? null} tone="violet" />
-                <MiniBar label="C" value={a?.content ?? null} tone="crit" />
-                <MiniBar label="D" value={a?.distribution ?? null} tone="accent" />
-                <span className="hide-sm tnum" title="Otentisitas (0 organik .. 1 terkoordinasi)" style={{ fontSize: 11, color: "var(--muted)", width: 68, textAlign: "right", flexShrink: 0 }}>
-                  koord {a?.authenticity != null ? Math.round(a.authenticity * 100) : "–"}%
-                </span>
-                <span className="tnum" style={{ fontSize: 11, color: "var(--muted)", width: 58, textAlign: "right", flexShrink: 0 }}>{n.evidence_count} bukti</span>
-                <Pill tone={riskTone(n.risk_score)} dot>risiko {n.risk_score != null ? n.risk_score.toFixed(2) : "–"}</Pill>
+              <div key={n.id} style={{ borderBottom: i < nars.length - 1 ? "1px solid var(--line-2)" : "none" }}>
+                <button onClick={() => toggle(n.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 0", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", color: "var(--ink)" }}>
+                  <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ flex: "1 1 220px", minWidth: 160 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
+                    {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
+                  </div>
+                  <MiniBar label="A" value={a?.actors ?? null} tone="info" />
+                  <MiniBar label="B" value={a?.behavior ?? null} tone="violet" />
+                  <MiniBar label="C" value={a?.content ?? null} tone="crit" />
+                  <MiniBar label="D" value={a?.distribution ?? null} tone="accent" />
+                  <span className="hide-sm tnum" title="Otentisitas (0 organik .. 1 terkoordinasi)" style={{ fontSize: 11, color: "var(--muted)", width: 68, textAlign: "right", flexShrink: 0 }}>
+                    koord {a?.authenticity != null ? Math.round(a.authenticity * 100) : "–"}%
+                  </span>
+                  <span className="tnum" style={{ fontSize: 11, color: "var(--muted)", width: 58, textAlign: "right", flexShrink: 0 }}>{n.evidence_count} bukti</span>
+                  <Pill tone={riskTone(n.risk_score)} dot>risiko {n.risk_score != null ? n.risk_score.toFixed(2) : "–"}</Pill>
+                  <Icon name={isOpen ? "chevronD" : "chevronR"} size={14} style={{ color: "var(--faint)", flexShrink: 0 }} />
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "2px 0 14px 34px" }}>
+                    <SignalStrip breakdown={n.risk_breakdown} />
+                    {busy === n.id ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Memuat bukti…</div>
+                      : (ev[n.id] || []).length === 0 ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Tak ada bukti tertaut.</div>
+                      : <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
+                          {(ev[n.id] || []).slice(0, 6).map((c) => (
+                            <div key={c.id} style={{ borderLeft: "2px solid var(--line)", paddingLeft: 11 }}>
+                              <div style={{ fontSize: 10.5, color: "var(--faint)", marginBottom: 2, display: "flex", gap: 6 }}>
+                                <span style={{ fontWeight: 600, color: "var(--muted)" }}>{c.platform}</span>
+                                {c.published_at && <span>· {new Date(c.published_at).toLocaleDateString("id")}</span>}
+                              </div>
+                              <div style={{ fontSize: 12, lineHeight: 1.45 }}>{c.content.slice(0, 200)}{c.content.length > 200 ? "…" : ""}</div>
+                              {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}>buka sumber ↗</a>}
+                            </div>
+                          ))}
+                          {(ev[n.id] || []).length > 6 && <div style={{ fontSize: 11, color: "var(--faint)" }}>+{(ev[n.id] || []).length - 6} bukti lain</div>}
+                        </div>}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </div>
     </Card>
+  );
+}
+
+// Sinyal forensik tambahan dari risk_breakdown Graph C (di luar ABC+D).
+function SignalStrip({ breakdown }: { breakdown: Record<string, unknown> | null }) {
+  const num = (k: string): number | null =>
+    typeof breakdown?.[k] === "number" ? (breakdown[k] as number) : null;
+  const platforms = Array.isArray(breakdown?.platforms) ? (breakdown!.platforms as string[]) : [];
+  const items: { label: string; value: string; title: string }[] = [];
+  const burst = num("burst");
+  if (burst != null) items.push({ label: "Ledakan", value: burst.toFixed(2), title: "Burst — lonjakan volume dalam waktu singkat" });
+  const tox = num("mean_toxicity");
+  if (tox != null) items.push({ label: "Toksisitas", value: `${Math.round(tox * 100)}%`, title: "Rerata skor toksisitas bukti" });
+  const cohesion = num("cohesion");
+  if (cohesion != null) items.push({ label: "Kohesi", value: cohesion.toFixed(2), title: "Kemiripan semantik antar-bukti (0..1)" });
+  const authors = num("unique_authors");
+  if (authors != null) items.push({ label: "Penulis unik", value: String(authors), title: "Jumlah penulis berbeda" });
+  const neg = num("neg_share");
+  if (neg != null) items.push({ label: "Porsi negatif", value: `${Math.round(neg * 100)}%`, title: "Bagian bukti bersentimen negatif" });
+  if (items.length === 0 && platforms.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      {items.map((it) => (
+        <span key={it.label} className="badge" title={it.title}
+          style={{ color: "var(--muted)", borderColor: "var(--line)", background: "var(--surface-2)" }}>
+          {it.label} <b className="tnum" style={{ color: "var(--ink)", marginLeft: 4 }}>{it.value}</b>
+        </span>
+      ))}
+      {platforms.map((p) => <Pill key={p} tone="muted">{p}</Pill>)}
+    </div>
   );
 }
 
