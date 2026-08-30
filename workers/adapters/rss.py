@@ -1,12 +1,17 @@
 """Adapter RSS/Atom — sumber prioritas v1 (gratis, legal, stabil).
 
 query = {
-    "feeds": ["https://.../rss", ...],
-    "keywords": ["stimulus", ...],   # opsional; kosong = ambil semua
+    "feeds": ["https://.../rss", ...],   # opsional
+    "keywords": ["laundry", ...],        # opsional; filter isi
 }
+
+Bila `feeds` KOSONG tapi `keywords` diberi, adapter otomatis menurunkan feed
+**Google News RSS** yang dapat dicari per-keyword (gratis, tanpa API key) — sehingga
+Scan Commander yang hanya memberi keyword tetap menghasilkan wacana nyata.
 """
 
 import time
+import urllib.parse
 from calendar import timegm
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -16,7 +21,21 @@ import httpx
 
 from workers.adapters.base import BaseAdapter, RawItem
 
-USER_AGENT = "ZandarOSINT/0.1 (research; contact via repo)"
+# UA gaya-browser: sebagian server feed (mis. Google News) menolak UA non-browser.
+USER_AGENT = "Mozilla/5.0 (compatible; ZandarOSINT/0.1; +research)"
+
+
+def google_news_feeds(keywords: list[str], lang: str = "id", country: str = "ID",
+                      max_terms: int = 6) -> list[str]:
+    """Bangun URL Google News RSS pencarian dari keyword (OR gabungan). Satu feed =
+    union hasil; Google News mengembalikan hingga ~100 artikel terbaru."""
+    terms = [k for k in keywords if k][:max_terms]
+    if not terms:
+        return []
+    q = " OR ".join(f'"{t}"' if " " in t else t for t in terms)
+    url = (f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}"
+           f"&hl={lang}&gl={country}&ceid={country}:{lang}")
+    return [url]
 
 
 class RssAdapter(BaseAdapter):
@@ -27,8 +46,12 @@ class RssAdapter(BaseAdapter):
     legal_note = "Feed dipublikasikan untuk konsumsi mesin."
 
     def collect(self, query: dict) -> Iterator[RawItem]:
-        feeds: list[str] = query.get("feeds", [])
-        keywords = [k.lower() for k in query.get("keywords", [])]
+        feeds: list[str] = list(query.get("feeds", []))
+        raw_keywords = list(query.get("keywords", []))
+        keywords = [k.lower() for k in raw_keywords]
+        # Tanpa feed eksplisit tapi ada keyword → cari via Google News RSS (gratis).
+        if not feeds and raw_keywords:
+            feeds = google_news_feeds(raw_keywords)
 
         for feed_url in feeds:
             try:
