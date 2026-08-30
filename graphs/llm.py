@@ -109,7 +109,7 @@ class StubProvider(LLMProvider):
 PRESETS: dict[str, tuple[str, str, str, str]] = {
     "groq": (
         "https://api.groq.com/openai/v1", "groq_api_key",
-        "llama-3.3-70b-versatile", "llama-3.1-8b-instant",
+        "openai/gpt-oss-120b", "openai/gpt-oss-20b",  # model Groq 2026
     ),
     "gemini": (
         "https://generativelanguage.googleapis.com/v1beta/openai", "gemini_api_key",

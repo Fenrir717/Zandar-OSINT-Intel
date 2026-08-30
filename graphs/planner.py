@@ -21,7 +21,22 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from graphs.llm import Usage, get_llm
-from workers.adapters import ADAPTERS
+from workers.adapters import ADAPTERS, describe_all
+
+
+def _source_catalog() -> str:
+    """Katalog adapter untuk prompt select_sources — LLM harus memilih dari kunci ini."""
+    lines = []
+    for a in describe_all():
+        flags = []
+        if a["tier"] != "free":
+            flags.append(a["tier"])
+        if a["requires_credentials"]:
+            flags.append("butuh-kredensial")
+        tag = f" [{', '.join(flags)}]" if flags else ""
+        note = a["rate_note"] or a["legal_note"]
+        lines.append(f"- {a['key']}{tag}: {note[:70]}")
+    return "\n".join(lines)
 
 
 class PlannerState(TypedDict, total=False):
@@ -77,15 +92,23 @@ def _node_expand_keywords(state: PlannerState) -> dict:
 def _node_select_sources(state: PlannerState) -> dict:
     llm = get_llm()
     usage = Usage(**state["usage"])
+    system = (
+        "Pilih sumber koleksi OSINT. WAJIB pilih HANYA dari daftar 'platform' berikut "
+        "(pakai kunci persis apa adanya). Utamakan tier free tanpa kredensial kecuali "
+        "diminta. Untuk news pakai query {keywords,timespan,fetch_full_text}; rss "
+        "{feeds,keywords}; youtube {video_ids}; reddit {subreddits,keywords}.\n\n"
+        f"PLATFORM TERSEDIA:\n{_source_catalog()}\n\n"
+        'Balas JSON: {"sources":[{"platform":"<kunci>","query":{...},"est_items":<int>}]}'
+    )
     r = llm.call_json(
         "R",
-        "Pilih sumber koleksi + parameter dari registry. Hindari sumber berbayar/berkredensial "
-        "kecuali diminta. JSON {sources:[{platform,query,est_items}]}.",
-        f"keywords: {state['keywords']}, region: {state['intent'].get('region')}",
+        system,
+        f"keywords: {state['keywords']}, region: {state['intent'].get('region')}, "
+        f"period_days: {state['intent'].get('period_days')}",
         hint={"node": "select_sources", "keywords": state["keywords"]},
     )
     usage.add(r)
-    # Validasi: hanya platform yang dikenal registry
+    # Validasi keras: hanya kunci yang dikenal registry (buang halusinasi platform)
     sources = [s for s in r.data.get("sources", []) if s.get("platform") in ADAPTERS]
     return {"sources": sources, "usage": usage.__dict__}
 

@@ -36,9 +36,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""
 
-    # Klasifikasi (Fase 2) — lexicon (default, tanpa GPU) | indobert | flash
+    # Klasifikasi (Fase 2) — lexicon (default, tanpa GPU) | indobert (multi-model) | flash
     classifier_provider: str = "lexicon"
     indobert_sentiment_model: str = "w11wo/indonesian-roberta-base-sentiment-classifier"
+    indobert_emotion_model: str = "w11wo/indonesian-roberta-base-prdect-id"
+    indobert_hatespeech_model: str = "Hate-speech-CNERG/dehatebert-mono-indonesian"
 
     # Orkestrasi LangGraph (Fase 2) — stub (default) | groq | gemini | cerebras | openrouter
     llm_provider: str = "stub"
