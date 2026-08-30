@@ -67,7 +67,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <Button icon="spark" onClick={run} disabled={busy}>{busy ? "Menjalankan…" : "Jalankan Analisis"}</Button>
       </div>
 
-      <div className="grid-stats" style={{ marginBottom: 16 }}>
+      <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>
         <div className="rise rise-2"><Tile label="Dianalisis" value={stats ? stats.analyzed.toLocaleString("id") : "–"} icon="analysis" sub={stats ? `${covered}% cakupan` : undefined} /></div>
         <div className="rise rise-3"><Tile label="Rerata sentimen" value={stats?.avg_sentiment != null ? stats.avg_sentiment.toFixed(2) : "–"} icon="spark" tone={stats && stats.avg_sentiment != null && stats.avg_sentiment < -0.1 ? "crit" : undefined} /></div>

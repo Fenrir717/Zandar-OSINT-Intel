@@ -234,6 +234,10 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ---------- layout helpers ---------- */
 .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+/* Baris statistik 6-tile (AI Analysis) — dipaksa sejajar satu baris di desktop. */
+.grid-stats-6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1200px) { .grid-stats-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .grid-stats-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .scroll-x { overflow-x: auto; }
 .hide-sm { display: initial; }
 .menu-btn { display: none; }
