@@ -20,6 +20,12 @@ _LABEL_MAP = {"negative": "neg", "neutral": "neu", "positive": "pos"}
 _EMOT_MAP = {"anger": "anger", "fear": "fear", "happy": "joy", "love": "trust",
              "sadness": "sadness", "sad": "sadness"}
 EMOT_LABELS = ["anger", "fear", "joy", "trust", "sadness"]
+# Hate-speech Indonesia (Ibrohim & Budi 2019) — kolom HS biner
+HATESPEECH_CSV = (
+    "https://raw.githubusercontent.com/okkyibrohim/"
+    "id-multi-label-hate-speech-and-abusive-language-detection/master/re_dataset.csv"
+)
+TOX_LABELS = ["hate", "clean"]
 
 
 def load_nusax(lang: str = "indonesian", split: str = "test", cache_dir: str = "data/gold") -> list[tuple[str, str]]:
@@ -61,6 +67,28 @@ def load_emot(split: str = "test", cache_dir: str = "data/gold") -> list[tuple[s
         emo = _EMOT_MAP.get((r.get("label") or "").strip().lower())
         if text and emo:
             rows.append((text, emo))
+    return rows
+
+
+def load_hatespeech(cache_dir: str = "data/gold") -> list[tuple[str, str]]:
+    """Gold hate-speech Indonesia (Ibrohim 2019). Kembalikan [(tweet, 'hate'|'clean')].
+    File tunggal (tanpa split resmi) berenkoding latin-1."""
+    cache = Path(cache_dir) / "hatespeech_id.csv"
+    if cache.exists():
+        raw = cache.read_bytes()
+    else:
+        resp = httpx.get(HATESPEECH_CSV, timeout=90, follow_redirects=True)
+        resp.raise_for_status()
+        raw = resp.content
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(raw)
+
+    rows: list[tuple[str, str]] = []
+    for r in csv.DictReader(io.StringIO(raw.decode("latin-1"))):
+        text = (r.get("Tweet") or "").strip()
+        hs = (r.get("HS") or "").strip()
+        if text and hs in ("0", "1"):
+            rows.append((text, "hate" if hs == "1" else "clean"))
     return rows
 
 

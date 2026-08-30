@@ -211,6 +211,17 @@ jauh di atas alternatif review-produk `w11wo/...prdect-id` (0.419). Ganti via
 `INDOBERT_EMOTION_MODEL`. (Gate 0.82 adalah untuk sentimen; emosi 5-kelas ceiling
 realistisnya lebih rendah.)
 
+Toksisitas tervalidasi terhadap **hate-speech Indonesia** (Ibrohim & Budi 2019):
+
+```bash
+python scripts/eval_classifier.py --task toxicity --provider indobert --limit 600
+```
+
+`dehatebert` = **F1 0.865 (LULUS)** — well-calibrated untuk hate-speech nyata.
+
+**Ringkasan validasi classifier:** sentimen 0.894 ✓ · toksisitas 0.865 ✓ ·
+emosi 0.717 (SOTA 5-kelas) — semua tervalidasi gold set, tanpa pelabelan manual.
+
 ## Observability (opsional)
 
 ```bash

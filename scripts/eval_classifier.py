@@ -10,7 +10,14 @@ Gate PRD §7.4: F1 makro sentimen >= 0.82.
 import argparse
 import time
 
-from workers.classify.eval import EMOT_LABELS, confusion, load_emot, load_nusax, prf
+from workers.classify.eval import (
+    EMOT_LABELS,
+    TOX_LABELS,
+    load_emot,
+    load_hatespeech,
+    load_nusax,
+    prf,
+)
 
 
 def make(provider: str):
@@ -26,16 +33,22 @@ def make(provider: str):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", nargs="+", default=["lexicon", "indobert"])
-    ap.add_argument("--task", choices=["sentiment", "emotion"], default="sentiment")
+    ap.add_argument("--task", choices=["sentiment", "emotion", "toxicity"], default="sentiment")
     ap.add_argument("--split", default="test")
     ap.add_argument("--limit", type=int, default=0, help="0 = semua")
+    ap.add_argument("--tox-threshold", type=float, default=0.5)
     args = ap.parse_args()
 
+    field = None  # toxicity di-threshold dari skor, bukan atribut label langsung
     if args.task == "emotion":
         gold = load_emot(split=args.split)
         labels = EMOT_LABELS
         field = "emotion"
         name = "IndoNLU EmoT (tweet)"
+    elif args.task == "toxicity":
+        gold = load_hatespeech()
+        labels = TOX_LABELS
+        name = "Hate-speech Indonesia (Ibrohim 2019)"
     else:
         gold = load_nusax(split=args.split)
         labels = ["neg", "neu", "pos"]
@@ -53,7 +66,11 @@ def main() -> None:
     for prov in args.provider:
         clf = make(prov)
         t = time.time()
-        y_pred = [getattr(lab, field) for lab in clf.classify(texts)]
+        labs = clf.classify(texts)
+        if args.task == "toxicity":
+            y_pred = ["hate" if la.toxicity > args.tox_threshold else "clean" for la in labs]
+        else:
+            y_pred = [getattr(la, field) for la in labs]
         dur = time.time() - t
         m = prf(y_true, y_pred, labels)
         gate = "LULUS" if m["macro_f1"] >= 0.82 else "belum"
