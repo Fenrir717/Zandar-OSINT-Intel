@@ -13,8 +13,13 @@ from pathlib import Path
 import httpx
 
 NUSAX_RAW = "https://raw.githubusercontent.com/IndoNLP/nusax/main/datasets/sentiment"
+EMOT_RAW = "https://raw.githubusercontent.com/IndoNLP/indonlu/master/dataset/emot_emotion-twitter"
 # label NusaX -> taksonomi internal
 _LABEL_MAP = {"negative": "neg", "neutral": "neu", "positive": "pos"}
+# label EmoT -> taksonomi emosi internal (EMOTIONS)
+_EMOT_MAP = {"anger": "anger", "fear": "fear", "happy": "joy", "love": "trust",
+             "sadness": "sadness", "sad": "sadness"}
+EMOT_LABELS = ["anger", "fear", "joy", "trust", "sadness"]
 
 
 def load_nusax(lang: str = "indonesian", split: str = "test", cache_dir: str = "data/gold") -> list[tuple[str, str]]:
@@ -35,6 +40,27 @@ def load_nusax(lang: str = "indonesian", split: str = "test", cache_dir: str = "
         label = _LABEL_MAP.get((r.get("label") or "").strip().lower())
         if text and label:
             rows.append((text, label))
+    return rows
+
+
+def load_emot(split: str = "test", cache_dir: str = "data/gold") -> list[tuple[str, str]]:
+    """Gold emosi IndoNLU EmoT (tweet Indonesia). Kembalikan [(tweet, emosi_internal)]."""
+    cache = Path(cache_dir) / f"emot_{split}.csv"
+    if cache.exists():
+        raw = cache.read_text(encoding="utf-8")
+    else:
+        resp = httpx.get(f"{EMOT_RAW}/{split}_preprocess.csv", timeout=60, follow_redirects=True)
+        resp.raise_for_status()
+        raw = resp.text
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(raw, encoding="utf-8")
+
+    rows: list[tuple[str, str]] = []
+    for r in csv.DictReader(io.StringIO(raw)):
+        text = (r.get("tweet") or "").strip()
+        emo = _EMOT_MAP.get((r.get("label") or "").strip().lower())
+        if text and emo:
+            rows.append((text, emo))
     return rows
 
 
