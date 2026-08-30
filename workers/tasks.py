@@ -19,6 +19,7 @@ from core.models import Analysis, Collection, CollectionRun, Comment, Investigat
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
 from workers.classify import get_classifier
+from workers.classify.cache import get_cached, set_cached
 from workers.classify.preprocess import preprocess_for_classify
 from workers.classify.refine import refine_low_confidence
 from workers.enrichment import enrich
@@ -128,6 +129,7 @@ def classify_investigation(
 async def _classify(investigation_id: str, batch_size: int, reclassify: bool = False) -> dict:
     clf = get_classifier()
     analyzed = 0
+    cache_hits = 0
     inv = uuid.UUID(investigation_id)
     seen: set = set()  # id yang sudah diproses — cegah loop tak henti (upsert tak kurangi kandidat)
 
@@ -150,8 +152,19 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
         # idle_in_transaction_session_timeout → "connection closed" saat menulis.
         raw_texts = [content for _, content in rows]
         pre_texts = [preprocess_for_classify(t) for t in raw_texts]  # slang/emoji → baku
-        labels = clf.classify(pre_texts)
-        refine_low_confidence(raw_texts, labels)  # sarkasme: pakai teks ASLI, low-conf saja
+
+        # Cache Redis: teks identik (spam/template) tak dianalisis ulang. reclassify
+        # memaksa segar (agar perubahan model/pipeline terpakai) tapi tetap refresh cache.
+        cached = [None] * len(pre_texts) if reclassify else get_cached(pre_texts, clf.version)
+        miss = [i for i, c in enumerate(cached) if c is None]
+        labels: list = list(cached)
+        if miss:
+            fresh = clf.classify([pre_texts[i] for i in miss])
+            refine_low_confidence([raw_texts[i] for i in miss], fresh)  # sarkasme, low-conf saja
+            set_cached([pre_texts[i] for i in miss], fresh, clf.version)
+            for j, i in enumerate(miss):
+                labels[i] = fresh[j]
+        cache_hits += len(pre_texts) - len(miss)
 
         # Fase 3 — tulis hasil (transaksi PENDEK, koneksi segar).
         now = datetime.now(UTC)
@@ -178,7 +191,8 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
             seen.add(cid)
         analyzed += len(rows)
 
-    return {"investigation_id": investigation_id, "analyzed": analyzed, "model": clf.version}
+    return {"investigation_id": investigation_id, "analyzed": analyzed,
+            "cache_hits": cache_hits, "model": clf.version}
 
 
 @celery_app.task(bind=True)
