@@ -72,6 +72,23 @@ async def analysis_stats(
         .join(Comment, Comment.id == Analysis.comment_id)
         .where(Comment.investigation_id == inv, Analysis.is_bot_suspect.is_(True))
     )
+    avg_conf = await session.scalar(
+        select(func.avg(Analysis.confidence))
+        .join(Comment, Comment.id == Analysis.comment_id)
+        .where(Comment.investigation_id == inv)
+    )
+    sarcasm = await session.scalar(
+        select(func.count())
+        .select_from(Analysis)
+        .join(Comment, Comment.id == Analysis.comment_id)
+        .where(Comment.investigation_id == inv, Analysis.is_sarcasm.is_(True))
+    )
+    low_conf = await session.scalar(
+        select(func.count())
+        .select_from(Analysis)
+        .join(Comment, Comment.id == Analysis.comment_id)
+        .where(Comment.investigation_id == inv, Analysis.confidence < 0.7)
+    )
 
     # Tren sentimen harian (rerata skor per hari publikasi)
     trend_res = await session.execute(
@@ -99,5 +116,8 @@ async def analysis_stats(
         "intent": await dist(Analysis.intent),
         "avg_sentiment": round(float(avg_sent), 3) if avg_sent is not None else None,
         "bot_suspect": bots or 0,
+        "avg_confidence": round(float(avg_conf), 3) if avg_conf is not None else None,
+        "sarcasm": sarcasm or 0,
+        "low_confidence": low_conf or 0,
         "sentiment_trend": trend,
     }

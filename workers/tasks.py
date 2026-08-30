@@ -19,6 +19,8 @@ from core.models import Analysis, Collection, CollectionRun, Comment, Investigat
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
 from workers.classify import get_classifier
+from workers.classify.preprocess import preprocess_for_classify
+from workers.classify.refine import refine_low_confidence
 from workers.enrichment import enrich
 from workers.raw_lake import ensure_bucket, put_raw
 
@@ -143,12 +145,16 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
             if not rows:
                 break
 
-            labels = clf.classify([content for _, content in rows])
+            raw_texts = [content for _, content in rows]
+            pre_texts = [preprocess_for_classify(t) for t in raw_texts]  # slang/emoji → baku
+            labels = clf.classify(pre_texts)
+            refine_low_confidence(raw_texts, labels)  # sarkasme: pakai teks ASLI, low-conf saja
             now = datetime.now(UTC)
             for (cid, _), lab in zip(rows, labels, strict=True):
                 values = dict(
                     comment_id=cid, sentiment=lab.sentiment, sentiment_score=lab.sentiment_score,
                     emotion=lab.emotion, intent=lab.intent, toxicity=lab.toxicity,
+                    confidence=lab.confidence, is_sarcasm=lab.is_sarcasm,
                     model_version=lab.model_version, analyzed_at=now,
                 )
                 ins = pg_insert(Analysis).values(**values)

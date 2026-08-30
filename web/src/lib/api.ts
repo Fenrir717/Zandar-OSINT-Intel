@@ -105,7 +105,8 @@ export interface AnalysisStats {
   total: number; analyzed: number; coverage: number;
   sentiment: Record<string, number>; emotion: Record<string, number>;
   intent: Record<string, number>; avg_sentiment: number | null;
-  bot_suspect: number; sentiment_trend: { day: string; avg: number; count: number }[];
+  bot_suspect: number; avg_confidence: number | null; sarcasm: number; low_confidence: number;
+  sentiment_trend: { day: string; avg: number; count: number }[];
 }
 export interface ReportMeta {
   id: string; title: string; status: string; classification: string;

@@ -184,6 +184,10 @@ class Analysis(Base):
     emotion: Mapped[str | None] = mapped_column(String(20), nullable=True)
     intent: Mapped[str | None] = mapped_column(String(20), nullable=True)
     toxicity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # keyakinan model pada label sentimen (0..1) — terpisah dari arah/intensitas.
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # label sentimen dikoreksi oleh refine sarkasme/ironi (LLM) saat confidence rendah.
+    is_sarcasm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_bot_suspect: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # hasil job CIB
     model_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

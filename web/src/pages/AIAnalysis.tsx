@@ -67,6 +67,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <div className="rise rise-2"><Tile label="Dianalisis" value={stats ? stats.analyzed.toLocaleString("id") : "–"} icon="analysis" sub={stats ? `${covered}% cakupan` : undefined} /></div>
         <div className="rise rise-3"><Tile label="Rerata sentimen" value={stats?.avg_sentiment != null ? stats.avg_sentiment.toFixed(2) : "–"} icon="spark" tone={stats && stats.avg_sentiment != null && stats.avg_sentiment < -0.1 ? "crit" : undefined} /></div>
         <div className="rise rise-4"><Tile label="Tersangka bot" value={stats ? stats.bot_suspect : "–"} icon="agents" tone={stats && stats.bot_suspect > 0 ? "warn" : undefined} /></div>
+        <div className="rise rise-1"><Tile label="Keyakinan model" value={stats?.avg_confidence != null ? `${Math.round(stats.avg_confidence * 100)}%` : "–"} icon="analysis" sub={stats && stats.low_confidence ? `${stats.low_confidence} perlu tinjau` : undefined} /></div>
+        <div className="rise rise-2"><Tile label="Sarkasme terkoreksi" value={stats ? stats.sarcasm : "–"} icon="spark" tone={stats && stats.sarcasm > 0 ? "warn" : undefined} /></div>
         <div className="rise rise-4"><Tile label="Narasi" value={nars.length || "–"} icon="graph" /></div>
       </div>
 
