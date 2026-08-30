@@ -13,7 +13,7 @@ const NAV: { section: string; items: { to: string; label: string; icon: IconName
     { to: "/collections", label: "Collections", icon: "collections" },
     { to: "/explorer", label: "Comment Explorer", icon: "comment" },
     { to: "/analysis", label: "AI Analysis", icon: "analysis" },
-    { to: "/graph", label: "Knowledge Graph", icon: "graph", phase: "F3" },
+    { to: "/graph", label: "Knowledge Graph", icon: "graph" },
     { to: "/timeline", label: "Timeline", icon: "timeline" },
     { to: "/forensics", label: "Forensik Narasi", icon: "spark" },
     { to: "/veracity", label: "Verifikasi Klaim", icon: "audit", phase: "F5" },

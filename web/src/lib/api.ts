@@ -72,6 +72,11 @@ export interface SystemService {
 export interface SystemUser {
   id: string; name: string; email: string; role: string; created_at: string | null;
 }
+export interface GraphNode { id: string; label: string; type: string; mentions: number; }
+export interface GraphEdge { source: string; target: string; weight: number; }
+export interface KnowledgeGraph {
+  nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number };
+}
 export interface AgentRun {
   id: string; graph_name: string; status: string; tokens_in: number;
   tokens_out: number; cost_usd: number; started_at: string | null; ended_at: string | null;
@@ -133,6 +138,9 @@ export const api = {
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
   systemStatus: () => req<SystemService[]>("/system/status"),
   systemUsers: () => req<SystemUser[]>("/system/users"),
+  graphData: (inv: string) => req<KnowledgeGraph>(`/investigations/${inv}/graph`),
+  buildGraph: (inv: string) =>
+    req<{ task_id: string; status: string }>(`/investigations/${inv}/graph/build`, { method: "POST" }),
   runAnalysis: (inv: string) =>
     req<{ task_id: string; status: string }>(`/analysis/${inv}/run`, { method: "POST" }),
 };

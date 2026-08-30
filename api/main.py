@@ -10,6 +10,7 @@ from api.routers import (
     auth,
     collections,
     comments,
+    graph,
     investigations,
     narratives,
     planner,
@@ -45,6 +46,7 @@ app.include_router(planner.router, prefix="/api/v1")
 app.include_router(narratives.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
+app.include_router(graph.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])

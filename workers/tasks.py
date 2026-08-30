@@ -217,6 +217,33 @@ async def _build_narratives(investigation_id: str, threshold: float, min_size: i
         return await run_analysis(session, inv, threshold, min_size)
 
 
+@celery_app.task(bind=True)
+def build_graph(self, investigation_id: str, batch_size: int = 500) -> dict:
+    """Fase 3: NER komentar → knowledge graph Neo4j (entitas + ko-okurensi)."""
+    return asyncio.run(_build_graph(investigation_id, batch_size))
+
+
+async def _build_graph(investigation_id: str, batch_size: int) -> dict:
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(Comment.content).where(Comment.investigation_id == uuid.UUID(investigation_id))
+        )).all()
+    texts = [r[0] for r in rows]
+    if not texts:
+        return {"investigation_id": investigation_id, "nodes": 0, "edges": 0, "note": "belum ada komentar"}
+    res = await asyncio.to_thread(_ner_and_write, investigation_id, texts)
+    return {"investigation_id": investigation_id, "comments": len(texts), **res}
+
+
+def _ner_and_write(inv_id: str, texts: list[str]) -> dict:
+    """NER + tulis Neo4j — sinkron, dijalankan dalam thread (CPU-bound + driver sync)."""
+    from core import graph
+    from workers.ner import get_ner
+
+    ents = get_ner().extract(texts)
+    return graph.write_graph(inv_id, ents)
+
+
 def _is_due(cron_expr: str, last_run_at: datetime | None, now: datetime) -> bool:
     """True bila tick cron terakhir (<= now) belum tercakup last_run_at.
 

@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     # Alternatif review-produk: w11wo/indonesian-roberta-base-prdect-id (F1 ~0.42 di tweet).
     indobert_emotion_model: str = "StevenLimcorn/indonesian-roberta-base-emotion-classifier"
     indobert_hatespeech_model: str = "Hate-speech-CNERG/dehatebert-mono-indonesian"
+    # NER (Fase 3) — ekstraksi entitas untuk knowledge graph
+    ner_model: str = "cahya/bert-base-indonesian-NER"
 
     # Orkestrasi LangGraph (Fase 2) — stub (default) | groq | gemini | cerebras | openrouter
     llm_provider: str = "stub"
