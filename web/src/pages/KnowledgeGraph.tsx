@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, type GraphEdge, type GraphNode, type KnowledgeGraph as KG } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, IconButton, Pill, Spinner } from "../components/ui";
@@ -62,7 +63,7 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
   const [sel, setSel] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [fs, setFs] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mx: number; my: number; px: number; py: number; moved: boolean } | null>(null);
@@ -79,10 +80,10 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [data]);
-  useEffect(() => {
-    const h = () => setFs(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", h);
-    return () => document.removeEventListener("fullscreenchange", h);
+  useEffect(() => {  // ESC keluar dari mode perbesar
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, []);
 
   async function load() {
@@ -142,12 +143,65 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
     const moved = drag.current?.moved; drag.current = null;
     if (!moved) setSel(null); // klik latar → lepas pilihan
   }
-  function toggleFs() {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else wrapRef.current?.requestFullscreen?.();
-  }
+  const toggleExpand = () => setExpanded((v) => !v);
   const selNode = sel ? byId[sel] : null;
   const selDeg = sel && data ? data.edges.filter((e) => e.source === sel || e.target === sel).length : 0;
+
+  const content = loading ? (
+    <div style={{ flex: 1, display: "grid", placeItems: "center", minHeight: 400 }}><Spinner size={26} /></div>
+  ) : !data || data.nodes.length === 0 ? (
+    <div style={{ flex: 1, display: "grid", placeItems: "center", padding: 24, minHeight: 400 }}>
+      <Empty icon="graph">Graf belum dibangun. Klik <b>Bangun graf</b> — NER lokal mengekstrak entitas lalu menyusunnya di Neo4j.</Empty>
+    </div>
+  ) : (
+    <>
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        <div style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
+          <IconButton icon="plus" title="Zoom in" onClick={() => setZoom((z) => Math.min(3, z + 0.25))} />
+          <div className="tnum" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)" }}>{Math.round(zoom * 100)}%</div>
+          <IconButton icon="minus" title="Zoom out" onClick={() => setZoom((z) => Math.max(0.4, z - 0.25))} />
+          <IconButton icon="reset" title="Reset tampilan" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} />
+          <IconButton icon={expanded ? "x" : "expand"} title={expanded ? "Tutup (Esc)" : "Layar penuh"} onClick={toggleExpand} />
+        </div>
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet"
+          style={{ width: "100%", height: "100%", display: "block", cursor: drag.current ? "grabbing" : "grab", touchAction: "none" }}
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+          role="img" aria-label="Knowledge graph entitas">
+          <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
+            {(data?.edges || []).map((e, i) => {
+              const a = pos[e.source], b = pos[e.target]; if (!a || !b) return null;
+              const touch = sel && (e.source === sel || e.target === sel);
+              const on = emph.has(e.source) && emph.has(e.target);
+              const op = sel ? (touch ? 0.85 : 0.06) : (filtering ? (on ? 0.5 : 0.08) : 0.5);
+              return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke={touch ? "var(--accent)" : "var(--line)"} strokeWidth={Math.min(3.5, 0.8 + e.weight * 0.5)} opacity={op} />;
+            })}
+            {(data?.nodes || []).map((n) => {
+              const p = pos[n.id]; if (!p) return null;
+              const r = 15 + (n.mentions / maxM) * 22;
+              const c = color(n.type);
+              const on = emph.has(n.id);
+              const isSel = sel === n.id;
+              return (
+                <g key={n.id} opacity={on ? 1 : 0.16} style={{ transition: "opacity .2s", cursor: "pointer" }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setSel(isSel ? null : n.id); }}>
+                  {isSel && <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={c} strokeOpacity={0.35} strokeWidth={2.5} />}
+                  <circle cx={p.x} cy={p.y} r={r} fill={c} fillOpacity={0.16} stroke={c} strokeWidth={isSel ? 3 : 2} />
+                  <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(15, r * 0.85)} fontWeight={700} fill={c} style={{ pointerEvents: "none" }}>{n.mentions}</text>
+                  <text x={p.x} y={p.y + r + 13} textAnchor="middle" fontSize={11} fill="var(--ink-2)" style={{ pointerEvents: "none", fontWeight: isSel ? 700 : 400 }}>{trunc(n.label, 20)}</text>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+      </div>
+      <div style={{ padding: "9px 14px", borderTop: "1px solid var(--line)", background: "var(--surface)", fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <Icon name="spark" size={12} style={{ color: "var(--accent)" }} />
+        Klik node untuk fokus · seret untuk menggeser · scroll / tombol untuk zoom · <b className="tnum" style={{ color: "var(--ink-2)" }}>{data?.nodes.length}</b> node teratas
+      </div>
+    </>
+  );
 
   return (
     <div>
@@ -208,62 +262,21 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
         </div>
 
         {/* Kanvas graf */}
-        <Card style={{ padding: 0, overflow: "hidden", position: "relative" }}>
-          <div ref={wrapRef} style={{ position: "relative", background: "var(--surface)" }}>
-            {loading ? <div style={{ height: 500, display: "grid", placeItems: "center" }}><Spinner size={26} /></div>
-              : !data || data.nodes.length === 0 ? (
-                <div style={{ height: 500, display: "grid", placeItems: "center", padding: 24 }}>
-                  <Empty icon="graph">Graf belum dibangun. Klik <b>Bangun graf</b> — NER lokal mengekstrak entitas lalu menyusunnya di Neo4j.</Empty>
-                </div>
-              ) : (
-                <>
-                  <div style={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}>
-                    <IconButton icon="plus" title="Perbesar" onClick={() => setZoom((z) => Math.min(3, z + 0.25))} />
-                    <div className="tnum" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)" }}>{Math.round(zoom * 100)}%</div>
-                    <IconButton icon="minus" title="Perkecil" onClick={() => setZoom((z) => Math.max(0.4, z - 0.25))} />
-                    <IconButton icon="reset" title="Reset tampilan" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} />
-                    <IconButton icon="expand" title="Layar penuh" onClick={toggleFs} />
-                  </div>
-                  <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`}
-                    style={{ width: "100%", height: fs ? "100vh" : "auto", display: "block", cursor: drag.current ? "grabbing" : "grab", touchAction: "none" }}
-                    onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
-                    role="img" aria-label="Knowledge graph entitas">
-                    <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-                      {data.edges.map((e, i) => {
-                        const a = pos[e.source], b = pos[e.target]; if (!a || !b) return null;
-                        const touch = sel && (e.source === sel || e.target === sel);
-                        const on = emph.has(e.source) && emph.has(e.target);
-                        const op = sel ? (touch ? 0.85 : 0.06) : (filtering ? (on ? 0.5 : 0.08) : 0.5);
-                        return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                          stroke={touch ? "var(--accent)" : "var(--line)"} strokeWidth={Math.min(3.5, 0.8 + e.weight * 0.5)} opacity={op} />;
-                      })}
-                      {data.nodes.map((n) => {
-                        const p = pos[n.id]; if (!p) return null;
-                        const r = 15 + (n.mentions / maxM) * 22;
-                        const c = color(n.type);
-                        const on = emph.has(n.id);
-                        const isSel = sel === n.id;
-                        return (
-                          <g key={n.id} opacity={on ? 1 : 0.16} style={{ transition: "opacity .2s", cursor: "pointer" }}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={(e) => { e.stopPropagation(); setSel(isSel ? null : n.id); }}>
-                            {isSel && <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={c} strokeOpacity={0.35} strokeWidth={2.5} />}
-                            <circle cx={p.x} cy={p.y} r={r} fill={c} fillOpacity={0.16} stroke={c} strokeWidth={isSel ? 3 : 2} />
-                            <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(15, r * 0.85)} fontWeight={700} fill={c} style={{ pointerEvents: "none" }}>{n.mentions}</text>
-                            <text x={p.x} y={p.y + r + 13} textAnchor="middle" fontSize={11} fill="var(--ink-2)" style={{ pointerEvents: "none", fontWeight: isSel ? 700 : 400 }}>{trunc(n.label, 20)}</text>
-                          </g>
-                        );
-                      })}
-                    </g>
-                  </svg>
-                  <div style={{ position: "absolute", bottom: 10, left: 14, fontSize: 11, color: "var(--faint)", pointerEvents: "none" }}>
-                    Klik node untuk fokus · seret untuk menggeser · scroll / tombol untuk zoom · {data.nodes.length} node teratas
-                  </div>
-                </>
-              )}
-          </div>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          {expanded ? (
+            <div style={{ height: 540, display: "grid", placeItems: "center", color: "var(--muted)", fontSize: 12.5, textAlign: "center", padding: 20 }}>
+              Grafik dibuka layar penuh.<br />Tekan <b>×</b> atau <b>Esc</b> untuk kembali.
+            </div>
+          ) : (
+            <div ref={wrapRef} style={{ position: "relative", display: "flex", flexDirection: "column", height: 540, background: "var(--surface)" }}>{content}</div>
+          )}
         </Card>
       </div>
+
+      {expanded && createPortal(
+        <div ref={wrapRef} style={{ position: "fixed", inset: 0, zIndex: 200, background: "var(--bg)", display: "flex", flexDirection: "column" }}>{content}</div>,
+        document.body,
+      )}
     </div>
   );
 }
