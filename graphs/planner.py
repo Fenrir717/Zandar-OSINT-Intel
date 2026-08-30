@@ -140,6 +140,32 @@ def _node_select_sources(state: PlannerState) -> dict:
     return {"sources": sources, "usage": usage.__dict__}
 
 
+def _node_recon(state: PlannerState) -> dict:
+    """Agen Recon (agent intel): temukan URL target relevan (DuckDuckGo + benih LLM)
+    → tambah sumber `website` agar wacana web umum (blog/artikel/forum) ikut terkumpul
+    tanpa analis mengetik URL. Best-effort — kegagalan tak menghentikan perencanaan."""
+    sources = list(state.get("sources", []))
+    keywords = state.get("keywords", [])
+    topic = (state.get("intent") or {}).get("topic", "")
+    try:
+        from graphs.recon import discover_targets
+
+        found = discover_targets(keywords, topic=topic)
+    except Exception:
+        found = []
+    if found:
+        spec = found[0]
+        existing = next((s for s in sources if s.get("platform") == "website"), None)
+        if existing:  # gabungkan bila LLM sudah memilih website
+            merged = list(dict.fromkeys(
+                list(existing.get("query", {}).get("urls", [])) + spec["query"]["urls"]))
+            existing.setdefault("query", {})["urls"] = merged
+            existing["est_items"] = len(merged)
+        else:
+            sources.append(spec)
+    return {"sources": sources}
+
+
 def _node_estimate_cost(state: PlannerState) -> dict:
     """Node kode (tanpa LLM): estimasi volume & biaya, validasi budget cap."""
     total_items = sum(int(s.get("est_items", 0)) for s in state["sources"])
@@ -181,6 +207,7 @@ def build_planner():
     g.add_node("parse_intent", _node_parse_intent)
     g.add_node("expand_keywords", _node_expand_keywords)
     g.add_node("select_sources", _node_select_sources)
+    g.add_node("recon", _node_recon)
     g.add_node("estimate_cost", _node_estimate_cost)
     g.add_node("human_approval", _node_human_approval)
     g.add_node("dispatch", _node_dispatch)
@@ -188,7 +215,8 @@ def build_planner():
     g.add_edge(START, "parse_intent")
     g.add_edge("parse_intent", "expand_keywords")
     g.add_edge("expand_keywords", "select_sources")
-    g.add_edge("select_sources", "estimate_cost")
+    g.add_edge("select_sources", "recon")
+    g.add_edge("recon", "estimate_cost")
     g.add_edge("estimate_cost", "human_approval")
     g.add_conditional_edges("human_approval", _route_after_approval, {"dispatch": "dispatch", END: END})
     g.add_edge("dispatch", END)
