@@ -59,14 +59,23 @@ export function MarketResearch({ headerSlot }: { headerSlot: (n: React.ReactNode
       </div>
 
       <Card style={{ padding: 18, marginBottom: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 2fr 1fr auto", gap: 12, alignItems: "end" }} className="market-form">
+        <style>{`
+          .market-form { display: grid; grid-template-columns: 1.4fr 2fr 1fr auto; gap: 12px; align-items: end; }
+          .market-form .market-analyze { display: flex; }
+          .market-form .market-analyze .btn { height: 40px; }
+          @media (max-width: 760px) {
+            .market-form { grid-template-columns: 1fr; }
+            .market-form .market-analyze .btn { width: 100%; }
+          }
+        `}</style>
+        <div className="market-form">
           <Field label="Kategori bisnis">
             <select className="select" value={category} onChange={(e) => setCategory(e.target.value)} style={{ height: 40 }}>
               {cats.length === 0 && <option value="laundry">Laundry</option>}
               {cats.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </Field>
-          <Field label="Lokasi" hint="kota / kecamatan / alamat">
+          <Field label="Lokasi">
             <input className="input" value={location} onChange={(e) => setLocation(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !busy) run(); }}
               placeholder="mis. Sewon, Bantul, Yogyakarta" style={{ height: 40 }} autoFocus />
@@ -76,9 +85,14 @@ export function MarketResearch({ headerSlot }: { headerSlot: (n: React.ReactNode
               {RADII.map((r) => <option key={r} value={r}>{r / 1000} km</option>)}
             </select>
           </Field>
-          <Button icon="target" onClick={run} disabled={busy}>{busy ? "Menganalisis…" : "Analisis"}</Button>
+          <div className="market-analyze">
+            <Button icon="target" onClick={run} disabled={busy}>{busy ? "Menganalisis…" : "Analisis"}</Button>
+          </div>
         </div>
-        {catNote && <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 10 }}>{catNote}</div>}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 11, fontSize: 11.5, color: "var(--faint)" }}>
+          <span>Lokasi bisa berupa kota, kecamatan, atau alamat.</span>
+          {catNote && <span style={{ color: "var(--muted)" }}>· {catNote}</span>}
+        </div>
         {error && <div style={{ fontSize: 12.5, color: "var(--crit-ink)", marginTop: 10 }}>{error}</div>}
       </Card>
 
