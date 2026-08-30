@@ -101,31 +101,63 @@ class StubProvider(LLMProvider):
         return LLMResult(data=data, tokens_in=toks_in, tokens_out=len(json.dumps(data).split()))
 
 
-# ---------------------------------------------------------------- openrouter (rangka)
+# ---------------------------------------------------------------- OpenAI-compatible
 
-class OpenRouterProvider(LLMProvider):
-    """Provider nyata via OpenRouter (GLM/DeepSeek/dll). Diaktifkan saat
-    OPENROUTER_API_KEY diisi. Model per tier dari env."""
+# Preset backend gratis/murah (semua endpoint OpenAI-compatible). Model default per
+# tier bisa ditimpa via LLM_MODEL_R / LLM_MODEL_F di env.
+#   name -> (base_url, env_key, default_model_R, default_model_F)
+PRESETS: dict[str, tuple[str, str, str, str]] = {
+    "groq": (
+        "https://api.groq.com/openai/v1", "groq_api_key",
+        "llama-3.3-70b-versatile", "llama-3.1-8b-instant",
+    ),
+    "gemini": (
+        "https://generativelanguage.googleapis.com/v1beta/openai", "gemini_api_key",
+        "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    ),
+    "cerebras": (
+        "https://api.cerebras.ai/v1", "cerebras_api_key",
+        "llama-3.3-70b", "llama3.1-8b",
+    ),
+    "openrouter": (
+        "https://openrouter.ai/api/v1", "openrouter_api_key",
+        "z-ai/glm-4.6", "z-ai/glm-4.5-air",
+    ),
+}
 
-    def __init__(self) -> None:
-        self.key = get_settings().openrouter_api_key
+
+class OpenAICompatProvider(LLMProvider):
+    """Satu provider untuk semua backend OpenAI-compatible (Groq/Gemini/Cerebras/
+    OpenRouter). Dipilih via LLM_PROVIDER; kunci dari env sesuai preset. temperature 0
+    + JSON mode. Melaporkan token untuk agent_runs + budget cap."""
+
+    def __init__(self, preset: str) -> None:
+        base_url, env_key, default_r, default_f = PRESETS[preset]
+        self.preset = preset
+        self.base_url = base_url
+        s = get_settings()
+        self.key = getattr(s, env_key, "")
         if not self.key:
-            raise RuntimeError("LLM_PROVIDER=openrouter tapi OPENROUTER_API_KEY kosong")
+            raise RuntimeError(
+                f"LLM_PROVIDER={preset} tapi {env_key.upper()} kosong. Daftar di provider, "
+                f"lalu isi {env_key.upper()} di .env."
+            )
+        self.model_r = s.llm_model_r or default_r
+        self.model_f = s.llm_model_f or default_f
 
     def call_json(self, tier: Tier, system: str, user: str, hint: dict | None = None) -> LLMResult:
         import httpx
 
-        s = get_settings()
-        model = s.llm_model_r if tier == "R" else s.llm_model_f
+        model = self.model_r if tier == "R" else self.model_f
         resp = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+            f"{self.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.key}"},
             json={
                 "model": model,
                 "temperature": 0,
                 "response_format": {"type": "json_object"},
                 "messages": [
-                    {"role": "system", "content": system + "\nBalas HANYA JSON valid."},
+                    {"role": "system", "content": system + "\nBalas HANYA JSON valid, tanpa teks lain."},
                     {"role": "user", "content": user},
                 ],
             },
@@ -145,12 +177,11 @@ class OpenRouterProvider(LLMProvider):
 def _extract_json(text: str) -> dict:
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
+    except (json.JSONDecodeError, TypeError):
+        m = re.search(r"\{.*\}", text or "", re.DOTALL)
         return json.loads(m.group(0)) if m else {}
 
 
-_PROVIDERS: dict[str, type[LLMProvider]] = {"stub": StubProvider, "openrouter": OpenRouterProvider}
 _instance: LLMProvider | None = None
 
 
@@ -158,9 +189,12 @@ def get_llm() -> LLMProvider:
     global _instance
     if _instance is None:
         name = get_settings().llm_provider
-        if name not in _PROVIDERS:
-            raise ValueError(f"LLM_PROVIDER tidak dikenal: {name}")
-        _instance = _PROVIDERS[name]()
+        if name == "stub":
+            _instance = StubProvider()
+        elif name in PRESETS:
+            _instance = OpenAICompatProvider(name)
+        else:
+            raise ValueError(f"LLM_PROVIDER tidak dikenal: {name} (pilih: stub, {', '.join(PRESETS)})")
     return _instance
 
 

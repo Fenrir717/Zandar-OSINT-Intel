@@ -40,10 +40,15 @@ class Settings(BaseSettings):
     classifier_provider: str = "lexicon"
     indobert_sentiment_model: str = "w11wo/indonesian-roberta-base-sentiment-classifier"
 
-    # Orkestrasi LangGraph (Fase 2) — stub (default, tanpa API key) | openrouter | anthropic
+    # Orkestrasi LangGraph (Fase 2) — stub (default) | groq | gemini | cerebras | openrouter
     llm_provider: str = "stub"
-    llm_model_r: str = "z-ai/glm-4.6"  # Tier R (reasoning)
-    llm_model_f: str = "z-ai/glm-4.5-air"  # Tier F (flash worker)
+    llm_model_r: str = ""  # kosong = default preset per provider (Tier R reasoning)
+    llm_model_f: str = ""  # kosong = default preset per provider (Tier F flash)
+
+    # Kunci provider LLM gratis (isi salah satu sesuai LLM_PROVIDER)
+    groq_api_key: str = ""
+    gemini_api_key: str = ""
+    cerebras_api_key: str = ""
 
     langfuse_host: str = ""
     langfuse_public_key: str = ""
