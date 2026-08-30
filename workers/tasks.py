@@ -14,7 +14,7 @@ from croniter import croniter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from core.db import SessionLocal
+from core.db import worker_session
 from core.models import Analysis, Collection, CollectionRun, Comment, Investigation, Source
 from workers.adapters import ADAPTERS, AdapterNotConfigured, CostGuardRejected
 from workers.celery_app import celery_app
@@ -35,7 +35,7 @@ def collect_source(self, collection_id: str, run_id: str) -> dict:
 
 
 async def _collect(collection_id: str, run_id: str) -> dict:
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         run = await session.get(CollectionRun, uuid.UUID(run_id))
         collection = await session.get(Collection, uuid.UUID(collection_id))
         if run is None or collection is None:
@@ -127,7 +127,7 @@ async def _classify(investigation_id: str, batch_size: int, reclassify: bool = F
     clf = get_classifier()
     analyzed = 0
     seen: set = set()  # saat reclassify, hindari loop tak henti (upsert tak mengurangi kandidat)
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         while True:
             stmt = select(Comment.id, Comment.content).where(
                 Comment.investigation_id == uuid.UUID(investigation_id)
@@ -180,7 +180,7 @@ async def _embed(investigation_id: str, batch_size: int) -> dict:
     emb = get_embedder()
     ensure_collection(emb.dim)
     indexed = 0
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         result = await session.execute(
             select(Comment.id, Comment.content, Comment.platform, Comment.lang, Comment.published_at)
             .where(Comment.investigation_id == uuid.UUID(investigation_id))
@@ -210,7 +210,7 @@ def build_narratives(self, investigation_id: str, threshold: float = 0.86, min_s
 async def _build_narratives(investigation_id: str, threshold: float, min_size: int) -> dict:
     from graphs.runner import run_analysis
 
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         inv = await session.get(Investigation, uuid.UUID(investigation_id))
         if inv is None:
             return {"status": "not_found"}
@@ -224,7 +224,7 @@ def build_graph(self, investigation_id: str, batch_size: int = 500) -> dict:
 
 
 async def _build_graph(investigation_id: str, batch_size: int) -> dict:
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         rows = (await session.execute(
             select(Comment.content).where(Comment.investigation_id == uuid.UUID(investigation_id))
         )).all()
@@ -270,7 +270,7 @@ def dispatch_due_collections() -> dict:
 async def _dispatch_due() -> dict:
     now = datetime.now(UTC)
     dispatched: list[str] = []
-    async with SessionLocal() as session:
+    async with worker_session() as session:
         result = await session.execute(
             select(Collection).where(Collection.schedule_cron.is_not(None))
         )
