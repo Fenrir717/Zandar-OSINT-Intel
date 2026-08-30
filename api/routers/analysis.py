@@ -29,7 +29,8 @@ async def run_analysis(
 
     from workers.tasks import classify_investigation
 
-    task = classify_investigation.delay(str(investigation_id))
+    from api.util import enqueue
+    task = enqueue(classify_investigation, str(investigation_id))
     return AnalyzeAccepted(task_id=task.id, status="queued")
 
 

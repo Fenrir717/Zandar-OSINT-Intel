@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -111,7 +111,18 @@ async def trigger_run(collection_id: uuid.UUID, session: DbSession, user: Curren
     # Import lokal agar API tetap hidup walau stack worker belum terpasang
     from workers.tasks import collect_source
 
-    collect_source.delay(str(col.id), str(run.id))
+    try:
+        collect_source.delay(str(col.id), str(run.id))
+    except Exception as exc:  # noqa: BLE001 — broker mati → jangan tinggalkan run "queued" yatim
+        run.status = "failed"
+        run.error = f"Gagal menjadwalkan task: {exc}"
+        run.finished_at = datetime.now(UTC)
+        await session.commit()
+        await session.refresh(run)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Antrean task tidak tersedia (broker Redis mati?). Run ditandai gagal.",
+        ) from exc
     return run
 
 

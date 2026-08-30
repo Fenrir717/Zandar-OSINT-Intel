@@ -64,7 +64,8 @@ async def index_comments(
     """Picu embedding + indeks Qdrant untuk pencarian semantik."""
     from workers.tasks import embed_investigation
 
-    task = embed_investigation.delay(str(investigation_id))
+    from api.util import enqueue
+    task = enqueue(embed_investigation, str(investigation_id))
     return {"task_id": task.id, "status": "queued"}
 
 
