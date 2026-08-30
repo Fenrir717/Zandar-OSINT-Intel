@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { api, type GraphEdge, type GraphNode, type KnowledgeGraph as KG } from "../lib/api";
+import { api, type Comment, type GraphEdge, type GraphNode, type KnowledgeGraph as KG } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, IconButton, Pill, Spinner } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -65,6 +65,8 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
   const [colorMode, setColorMode] = useState<"type" | "community">("type");
   const [sel, setSel] = useState<string | null>(null);
   const [selComm, setSelComm] = useState<number | null>(null);
+  const [src, setSrc] = useState<Comment[]>([]);
+  const [srcLoading, setSrcLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [expanded, setExpanded] = useState(false);
@@ -121,6 +123,18 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
     for (const e of data.edges) { if (e.source === sel) s.add(e.target); if (e.target === sel) s.add(e.source); }
     return s;
   }, [sel, data]);
+
+  useEffect(() => {  // provenance: entitas terpilih → komentar sumber yang menyebutnya
+    const node = sel ? byId[sel] : null;
+    if (!node || !selected) { setSrc([]); return; }
+    let alive = true;
+    setSrcLoading(true);
+    api.searchComments({ investigation_id: selected, q: node.label, limit: "6" })
+      .then((c) => { if (alive) setSrc(c); })
+      .catch(() => { if (alive) setSrc([]); })
+      .finally(() => { if (alive) setSrcLoading(false); });
+    return () => { alive = false; };
+  }, [sel, selected]);
   const commColorMap = useMemo(() => {
     const size = new Map<number, number>();
     (data?.nodes || []).forEach((n) => size.set(n.community, (size.get(n.community) || 0) + 1));
@@ -269,6 +283,20 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
                 <Pill tone="muted">{TYPE[selNode.type]?.label ?? selNode.type}</Pill>
                 <Pill tone="accent">{selNode.mentions} sebutan</Pill>
                 <Pill tone="info">{selDeg} koneksi</Pill>
+              </div>
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--line-2)", paddingTop: 10 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, marginBottom: 8 }}>Komentar sumber</div>
+                {srcLoading ? <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Memuat…</div>
+                  : src.length === 0 ? <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Tak ada komentar cocok.</div>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 9, maxHeight: 230, overflowY: "auto" }}>
+                      {src.map((c) => (
+                        <div key={c.id} style={{ fontSize: 11.5, borderLeft: "2px solid var(--line)", paddingLeft: 9 }}>
+                          <div style={{ fontSize: 10, color: "var(--faint)", marginBottom: 1 }}>{c.platform}</div>
+                          <div style={{ lineHeight: 1.4 }}>{c.content.slice(0, 120)}{c.content.length > 120 ? "…" : ""}</div>
+                          {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10.5 }}>sumber ↗</a>}
+                        </div>
+                      ))}
+                    </div>}
               </div>
               <button className="btn btn-ghost" style={{ marginTop: 10, width: "100%" }} onClick={() => setSel(null)}>Lepas pilihan</button>
             </Card>

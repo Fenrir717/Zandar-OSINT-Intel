@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type Narrative } from "../lib/api";
+import { api, type AnalysisStats, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -173,29 +173,67 @@ function Legend({ items }: { items: { label: string; value: number; color: strin
 }
 
 function NarrativesCard({ nars }: { nars: Narrative[] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [ev, setEv] = useState<Record<string, Evidence[]>>({});
+  const [busy, setBusy] = useState<string | null>(null);
   if (nars.length === 0) return null;
   const riskTone = (r: number | null) => (r == null ? "muted" : r >= 0.5 ? "crit" : r >= 0.35 ? "warn" : "ok") as "crit" | "warn" | "ok" | "muted";
+
+  async function toggle(id: string) {
+    if (open === id) { setOpen(null); return; }
+    setOpen(id);
+    if (!ev[id]) {
+      setBusy(id);
+      try { const e = await api.narrativeEvidence(id); setEv((m) => ({ ...m, [id]: e })); }
+      catch { setEv((m) => ({ ...m, [id]: [] })); }
+      finally { setBusy(null); }
+    }
+  }
+
+  const top = nars.slice(0, 8);
   return (
     <Card className="rise" style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontSize: 13.5, fontWeight: 600 }}>
         <span style={{ color: "var(--accent)" }}><Icon name="graph" size={16} /></span>Narasi Teratas (Graph C)
-        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>{nars.length} narasi · skor risiko ABC+D</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>klik untuk lihat bukti + sumber</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {nars.slice(0, 8).map((n, i) => (
-          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < Math.min(8, nars.length) - 1 ? "1px solid var(--line-2)" : "none" }}>
-            <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700 }}>{i + 1}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
-              {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
-            </div>
-            {n.assessment?.authenticity != null && (
-              <span className="hide-sm tnum" title="Otentisitas (0 organik .. 1 terkoordinasi)" style={{ fontSize: 11, color: "var(--muted)" }}>
-                koord {Math.round((n.assessment.authenticity || 0) * 100)}%
-              </span>
+        {top.map((n, i) => (
+          <div key={n.id} style={{ borderBottom: i < top.length - 1 ? "1px solid var(--line-2)" : "none" }}>
+            <button onClick={() => toggle(n.id)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", padding: "11px 0", background: "none", border: "none", cursor: "pointer", color: "var(--ink)" }}>
+              <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700 }}>{i + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
+                {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
+              </div>
+              {n.assessment?.authenticity != null && (
+                <span className="hide-sm tnum" title="Otentisitas (0 organik .. 1 terkoordinasi)" style={{ fontSize: 11, color: "var(--muted)" }}>
+                  koord {Math.round((n.assessment.authenticity || 0) * 100)}%
+                </span>
+              )}
+              <span className="tnum" style={{ fontSize: 11, color: "var(--muted)" }}>{n.evidence_count} bukti</span>
+              <Pill tone={riskTone(n.risk_score)} dot>risiko {n.risk_score != null ? n.risk_score.toFixed(2) : "–"}</Pill>
+              <Icon name={open === n.id ? "chevronD" : "chevronR"} size={14} style={{ color: "var(--faint)" }} />
+            </button>
+            {open === n.id && (
+              <div style={{ padding: "2px 0 14px 32px" }}>
+                {busy === n.id ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Memuat bukti…</div>
+                  : (ev[n.id] || []).length === 0 ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Tak ada bukti tertaut.</div>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                      {(ev[n.id] || []).slice(0, 6).map((c) => (
+                        <div key={c.id} style={{ borderLeft: "2px solid var(--line)", paddingLeft: 11 }}>
+                          <div style={{ fontSize: 10.5, color: "var(--faint)", marginBottom: 2, display: "flex", gap: 6 }}>
+                            <span style={{ fontWeight: 600, color: "var(--muted)" }}>{c.platform}</span>
+                            {c.published_at && <span>· {new Date(c.published_at).toLocaleDateString("id")}</span>}
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.45 }}>{c.content.slice(0, 200)}{c.content.length > 200 ? "…" : ""}</div>
+                          {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4 }}>buka sumber ↗</a>}
+                        </div>
+                      ))}
+                      {(ev[n.id] || []).length > 6 && <div style={{ fontSize: 11, color: "var(--faint)" }}>+{(ev[n.id] || []).length - 6} bukti lain</div>}
+                    </div>}
+              </div>
             )}
-            <span className="tnum" style={{ fontSize: 11, color: "var(--muted)" }}>{n.evidence_count} bukti</span>
-            <Pill tone={riskTone(n.risk_score)} dot>risiko {n.risk_score != null ? n.risk_score.toFixed(2) : "–"}</Pill>
           </div>
         ))}
       </div>

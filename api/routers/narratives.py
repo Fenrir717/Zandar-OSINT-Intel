@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from api.deps import CurrentUser, DbSession
 from core.models import (
     AuditLog,
+    Comment,
     Investigation,
     Narrative,
     NarrativeAssessment,
@@ -95,3 +96,25 @@ async def list_narratives(
             },
         })
     return out
+
+
+@router.get("/narratives/{narrative_id}/evidence")
+async def narrative_evidence_comments(
+    narrative_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> list[dict]:
+    """Komentar/artikel bukti sebuah narasi + LINK SUMBER asli (provenance/keterlacakan)."""
+    rows = (await session.execute(
+        select(
+            Comment.id, Comment.platform, Comment.author_hash, Comment.content,
+            Comment.url, Comment.lang, Comment.published_at,
+        )
+        .join(narrative_evidence, narrative_evidence.c.comment_id == Comment.id)
+        .where(narrative_evidence.c.narrative_id == narrative_id)
+        .order_by(Comment.published_at.desc().nullslast())
+        .limit(50)
+    )).all()
+    return [
+        {"id": str(r[0]), "platform": r[1], "author_hash": r[2], "content": r[3],
+         "url": r[4], "lang": r[5], "published_at": r[6].isoformat() if r[6] else None}
+        for r in rows
+    ]

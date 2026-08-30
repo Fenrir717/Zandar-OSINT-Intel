@@ -97,6 +97,10 @@ export interface Narrative {
   first_seen: string | null; last_seen: string | null;
   assessment: NarrativeAssessment | null;
 }
+export interface Evidence {
+  id: string; platform: string; author_hash: string; content: string;
+  url: string | null; lang: string | null; published_at: string | null;
+}
 export interface AnalysisStats {
   total: number; analyzed: number; coverage: number;
   sentiment: Record<string, number>; emotion: Record<string, number>;
@@ -135,6 +139,7 @@ export const api = {
       body: JSON.stringify({ threshold, min_size: minSize }),
     }),
   narratives: (inv: string) => req<Narrative[]>(`/investigations/${inv}/narratives`),
+  narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
   systemStatus: () => req<SystemService[]>("/system/status"),
   systemUsers: () => req<SystemUser[]>("/system/users"),
