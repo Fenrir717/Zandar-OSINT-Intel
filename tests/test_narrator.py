@@ -108,3 +108,17 @@ def test_fallback_label_from_keywords() -> None:
 
     lab = _fallback_label(["harga beras naik terus", "beras makin mahal harga"])
     assert "Beras" in lab or "Harga" in lab  # kata dominan jadi label
+
+
+def test_label_survives_llm_error(monkeypatch) -> None:
+    """LLM error saat pelabelan → fallback ekstraktif; analisis tetap jalan."""
+    import graphs.narrator as N
+
+    class _Boom:
+        def call_json(self, *a, **k):
+            raise RuntimeError("semua model gagal")
+
+    monkeypatch.setattr(N, "get_llm", lambda: _Boom())
+    nars = build_narrator().invoke({"items": _items(), "threshold": 0.84, "min_size": 2}, {})["narratives"]
+    assert len(nars) == 2  # tetap menghasilkan narasi
+    assert all(n["label"] for n in nars)  # label ekstraktif terisi

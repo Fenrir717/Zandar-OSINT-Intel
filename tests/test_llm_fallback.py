@@ -101,6 +101,25 @@ def test_retry_then_fallback_on_429(monkeypatch, _openrouter) -> None:
     assert seen == ["m-a", "m-a", "m-a", "m-b"]  # 3 percobaan m-a → m-b
 
 
+def test_fallback_on_200_without_choices(monkeypatch, _openrouter) -> None:
+    """OpenRouter kadang balas 200 + {error} tanpa 'choices' → jangan crash, coba model lain."""
+    monkeypatch.setenv("LLM_MODEL_F", "m-a,m-b")
+    get_settings.cache_clear()
+    L.reset_llm()
+    seen: list[str] = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen.append(json["model"])
+        if json["model"] == "m-a":
+            return _Resp(200, {"error": {"message": "upstream hiccup"}})  # tanpa choices
+        return _Resp(200, _ok("b-menang"))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    r = L.get_llm().call_json("F", "s", "u")
+    assert r.data["label"] == "b-menang"
+    assert seen == ["m-a", "m-b"]
+
+
 def test_all_models_fail_raises(monkeypatch, _openrouter) -> None:
     monkeypatch.setenv("LLM_MODEL_F", "only-one")
     get_settings.cache_clear()

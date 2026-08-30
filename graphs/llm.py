@@ -238,7 +238,10 @@ class OpenAICompatProvider(LLMProvider):
             if resp.status_code >= 400:  # slug salah / kredit habis → coba endpoint lain
                 raise _ModelFailed(f"{ep.label}: {resp.status_code} {resp.text[:80]}")
             body = resp.json()
-            content = body["choices"][0]["message"]["content"]
+            choices = body.get("choices")
+            if not choices:  # OpenRouter kadang balas 200 + {"error":...} tanpa choices
+                raise _ModelFailed(f"{ep.label}: 200 tanpa choices ({str(body.get('error') or body)[:70]})")
+            content = choices[0].get("message", {}).get("content", "")
             usage = body.get("usage", {})
             return LLMResult(
                 data=_extract_json(content),

@@ -87,16 +87,19 @@ def _node_label(state: NarratorState) -> dict:
         rep = [items[idxs[j]]["content"] for j in most_representative(vecs, _REP_K)]
         summary = None
         if rank < _MAX_LLM_LABELS:
-            r = llm.call_json(
-                "F",
-                _LABEL_SYSTEM,
-                "Komentar dalam kelompok:\n- " + "\n- ".join(t[:220] for t in rep),
-                hint={"node": "label_narrative", "texts": rep},
-            )
-            usage.add(r)
-            data = r.data if isinstance(r.data, dict) else {}
-            label = str(data.get("label") or "").strip() or _fallback_label(rep)
-            summary = data.get("summary") or None
+            try:
+                r = llm.call_json(
+                    "F",
+                    _LABEL_SYSTEM,
+                    "Komentar dalam kelompok:\n- " + "\n- ".join(t[:220] for t in rep),
+                    hint={"node": "label_narrative", "texts": rep},
+                )
+                usage.add(r)
+                data = r.data if isinstance(r.data, dict) else {}
+                label = str(data.get("label") or "").strip() or _fallback_label(rep)
+                summary = data.get("summary") or None
+            except Exception:
+                label = _fallback_label(rep)  # LLM gagal → ekstraktif; jangan matikan analisis
         else:
             label = _fallback_label(rep)
         narratives.append({"member_idx": idxs, "label": label[:255], "summary": summary})
