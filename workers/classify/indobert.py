@@ -74,10 +74,12 @@ class IndoBertClassifier(Classifier):
         for i, lx in enumerate(lex):
             if sent:
                 s_lbl, s_score = _SENT_MAP.get(sent[i]["label"], ("neu", 0.0))
+                conf = float(sent[i].get("score", 0.5))  # keyakinan model (0..1)
                 sentiment = s_lbl
-                sentiment_score = round(s_score * float(sent[i].get("score", 0.5)), 3)
+                sentiment_score = round(s_score * conf, 3)
             else:
                 sentiment, sentiment_score = lx.sentiment, lx.sentiment_score
+                conf = min(1.0, abs(lx.sentiment_score) + 0.3)  # proxy keyakinan leksikon
 
             emotion = _EMO_MAP.get(emo[i]["label"].lower(), "neutral") if emo else lx.emotion
             toxicity = _hate_score(tox[i]) if tox else lx.toxicity
@@ -85,7 +87,7 @@ class IndoBertClassifier(Classifier):
             out.append(Label(
                 sentiment=sentiment, sentiment_score=sentiment_score,
                 emotion=emotion, intent=lx.intent, toxicity=toxicity,
-                model_version=self.version,
+                model_version=self.version, confidence=round(conf, 3),
             ))
         return out
 

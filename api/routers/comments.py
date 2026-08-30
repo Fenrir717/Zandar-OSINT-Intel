@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from api.deps import CurrentUser, DbSession
-from core.models import Comment
+from core.models import Analysis, Comment
 
 router = APIRouter(prefix="/comments", tags=["comments"])
 
@@ -20,6 +20,11 @@ class CommentOut(BaseModel):
     lang: str | None
     url: str | None
     published_at: datetime | None
+    # Sentimen + intensitas (dari |sentiment_score|) — diisi bila sudah dianalisis.
+    sentiment: str | None = None
+    sentiment_score: float | None = None
+    confidence: float | None = None
+    is_sarcasm: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -38,10 +43,12 @@ async def search_comments(
     lang: str | None = None,
     limit: int = 50,
     offset: int = 0,
-) -> list[Comment]:
+) -> list[CommentOut]:
     """Pencarian keyword dasar (Fase 1). Fase 2: hybrid semantik via Qdrant."""
     stmt = (
-        select(Comment)
+        select(Comment, Analysis.sentiment, Analysis.sentiment_score,
+               Analysis.confidence, Analysis.is_sarcasm)
+        .outerjoin(Analysis, Analysis.comment_id == Comment.id)
         .where(Comment.investigation_id == investigation_id)
         .order_by(Comment.published_at.desc().nullslast())
         .limit(min(limit, 200))
@@ -53,8 +60,16 @@ async def search_comments(
         stmt = stmt.where(Comment.platform == platform)
     if lang:
         stmt = stmt.where(Comment.lang == lang)
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
+    rows = (await session.execute(stmt)).all()
+    return [
+        CommentOut(
+            id=c.id, investigation_id=c.investigation_id, platform=c.platform,
+            author_hash=c.author_hash, content=c.content, lang=c.lang, url=c.url,
+            published_at=c.published_at, sentiment=sent, sentiment_score=score,
+            confidence=conf, is_sarcasm=bool(sarc),
+        )
+        for c, sent, score, conf, sarc in rows
+    ]
 
 
 @router.post("/{investigation_id}/index", status_code=status.HTTP_202_ACCEPTED)
@@ -64,7 +79,8 @@ async def index_comments(
     """Picu embedding + indeks Qdrant untuk pencarian semantik."""
     from workers.tasks import embed_investigation
 
-    task = embed_investigation.delay(str(investigation_id))
+    from api.util import enqueue
+    task = enqueue(embed_investigation, str(investigation_id))
     return {"task_id": task.id, "status": "queued"}
 
 

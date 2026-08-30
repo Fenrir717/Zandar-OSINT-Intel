@@ -3,9 +3,9 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type Evidence, type Narrative } from "../lib/api";
+import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
-import { Button, Card, Empty, Pill, Tile } from "../components/ui";
+import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
 
 const SENT_COLOR: Record<string, string> = {
@@ -23,6 +23,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const { list, selected, choose } = useInvestigations();
   const [stats, setStats] = useState<AnalysisStats | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
+  const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -34,9 +35,13 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n] = await Promise.all([api.analysisStats(selected), api.narratives(selected).catch(() => [])]);
-      setStats(s); setNars(n);
-    } catch { setStats(null); setNars([]); }
+      const [s, n, e] = await Promise.all([
+        api.analysisStats(selected),
+        api.narratives(selected).catch(() => []),
+        api.entities(selected).catch(() => []),
+      ]);
+      setStats(s); setNars(n); setEnts(e);
+    } catch { setStats(null); setNars([]); setEnts([]); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -62,18 +67,21 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <Button icon="spark" onClick={run} disabled={busy}>{busy ? "Menjalankan…" : "Jalankan Analisis"}</Button>
       </div>
 
-      <div className="grid-stats" style={{ marginBottom: 16 }}>
+      <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>
         <div className="rise rise-2"><Tile label="Dianalisis" value={stats ? stats.analyzed.toLocaleString("id") : "–"} icon="analysis" sub={stats ? `${covered}% cakupan` : undefined} /></div>
         <div className="rise rise-3"><Tile label="Rerata sentimen" value={stats?.avg_sentiment != null ? stats.avg_sentiment.toFixed(2) : "–"} icon="spark" tone={stats && stats.avg_sentiment != null && stats.avg_sentiment < -0.1 ? "crit" : undefined} /></div>
         <div className="rise rise-4"><Tile label="Tersangka bot" value={stats ? stats.bot_suspect : "–"} icon="agents" tone={stats && stats.bot_suspect > 0 ? "warn" : undefined} /></div>
-        <div className="rise rise-4"><Tile label="Narasi" value={nars.length || "–"} icon="graph" /></div>
+        <div className="rise rise-1"><Tile label="Keyakinan model" value={stats?.avg_confidence != null ? `${Math.round(stats.avg_confidence * 100)}%` : "–"} icon="analysis" sub={stats && stats.low_confidence ? `${stats.low_confidence} perlu tinjau` : undefined} /></div>
+        <div className="rise rise-2"><Tile label="Sarkasme terkoreksi" value={stats ? stats.sarcasm : "–"} icon="spark" tone={stats && stats.sarcasm > 0 ? "warn" : undefined} /></div>
       </div>
 
       {empty ? (
         <Empty icon="analysis">Belum ada hasil analisis untuk investigasi ini. Klik <b>Jalankan Analisis</b> untuk mengklasifikasi komentar.</Empty>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {selected && <ChatPanel inv={selected} />}
+
           <div className="grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <ChartCard title="Distribusi Sentimen" icon="comment">
               {sent.length === 0 ? <Mini /> : (
@@ -139,10 +147,139 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
             </ChartCard>
           </div>
 
+          <TargetSentiment ents={ents} />
+
           <NarrativesCard nars={nars} />
         </div>
       )}
     </div>
+  );
+}
+
+const ETYPE_LABEL: Record<string, string> = {
+  person: "Tokoh", organization: "Institusi", location: "Lokasi", misc: "Lainnya",
+};
+const EMO_LABEL: Record<string, string> = {
+  anger: "Marah", fear: "Takut", joy: "Senang", sadness: "Sedih",
+  trust: "Percaya", surprise: "Terkejut", disgust: "Jijik", neutral: "Netral",
+};
+const scoreTone = (s: number | null) =>
+  (s == null ? "muted" : s > 0.1 ? "ok" : s < -0.1 ? "crit" : "muted") as "ok" | "crit" | "muted";
+
+function TargetSentiment({ ents }: { ents: EntitySentiment[] }) {
+  if (ents.length === 0) return null;
+  const withSent = ents.filter((e) => e.pos + e.neg + e.neu > 0);
+  const shown = withSent.slice(0, 12);
+  return (
+    <Card className="rise" style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="target" size={16} /></span>Sentimen per Target
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>
+          {shown.length ? `${shown.length} entitas · dari knowledge graph` : "perlu bangun graph"}
+        </span>
+      </div>
+      {withSent.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55, padding: "6px 0" }}>
+          Entitas belum bermuatan sentimen. Buka <b>Knowledge Graph</b> lalu <b>bangun ulang</b> graph
+          (setelah analisis) agar sentimen tiap komentar tertaut ke target yang disebutnya.
+        </div>
+      ) : (
+        <div className="scroll-x">
+          <div style={{ minWidth: 560, display: "flex", flexDirection: "column" }}>
+            {shown.map((e, i) => {
+              const total = e.pos + e.neg + e.neu || 1;
+              const pp = (e.pos / total) * 100, up = (e.neu / total) * 100, npr = (e.neg / total) * 100;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < shown.length - 1 ? "1px solid var(--line-2)" : "none" }}>
+                  <div style={{ flex: "1 1 190px", minWidth: 150, display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</span>
+                    <Pill tone="muted">{ETYPE_LABEL[e.type] || e.type}</Pill>
+                  </div>
+                  <div title={`${e.pos} positif · ${e.neu} netral · ${e.neg} negatif`}
+                    style={{ display: "flex", width: 150, height: 9, borderRadius: 5, overflow: "hidden", background: "var(--surface-2)", flexShrink: 0 }}>
+                    <span style={{ width: `${pp}%`, background: "var(--ok)" }} />
+                    <span style={{ width: `${up}%`, background: "var(--line)" }} />
+                    <span style={{ width: `${npr}%`, background: "var(--crit)" }} />
+                  </div>
+                  <span className="hide-sm" style={{ fontSize: 11, color: "var(--muted)", width: 62, textAlign: "right", flexShrink: 0 }}>{e.emotion ? EMO_LABEL[e.emotion] || e.emotion : "–"}</span>
+                  <span className="tnum" style={{ fontSize: 11, color: "var(--faint)", width: 56, textAlign: "right", flexShrink: 0 }}>{e.mentions} sebut</span>
+                  <Pill tone={scoreTone(e.sent_score)} dot>{e.sent_score != null ? e.sent_score.toFixed(2) : "–"}</Pill>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const CHAT_SUGGESTIONS = [
+  "Ringkas temuan utama & beri satu rekomendasi",
+  "Entitas mana paling menonjol dan bagaimana sentimennya?",
+  "Narasi apa yang paling berisiko?",
+  "Emosi dominan publik terhadap topik ini apa?",
+];
+
+function ChatPanel({ inv }: { inv: string }) {
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function send(q: string) {
+    const question = q.trim();
+    if (!question || busy) return;
+    setInput("");
+    const history = messages.slice(-6);
+    setMessages((m) => [...m, { role: "user", content: question }]);
+    setBusy(true);
+    try {
+      const { answer } = await api.chatInvestigation(inv, question, history);
+      setMessages((m) => [...m, { role: "assistant", content: answer }]);
+    } catch {
+      setMessages((m) => [...m, { role: "assistant", content: "Maaf, gagal menjawab. Coba lagi." }]);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}>
+        <span style={{ color: "var(--accent)" }}><Icon name="spark" size={16} /></span>Asisten AI
+        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 400 }}>ngobrol dengan data investigasi</span>
+      </div>
+
+      {messages.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto", marginBottom: 12, paddingRight: 2 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "90%" }}>
+              <div style={{
+                fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", padding: "9px 12px", borderRadius: 12,
+                background: m.role === "user" ? "var(--accent-soft)" : "var(--surface-2)",
+                color: m.role === "user" ? "var(--accent-ink)" : "var(--ink)",
+                border: m.role === "assistant" ? "1px solid var(--line)" : "none",
+              }}>{m.content}</div>
+            </div>
+          ))}
+          {busy && <div style={{ alignSelf: "flex-start", fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 7, padding: "4px 2px" }}><Spinner size={13} /> Asisten sedang menganalisis data…</div>}
+        </div>
+      )}
+
+      {messages.length === 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
+          {CHAT_SUGGESTIONS.map((s) => (
+            <button key={s} onClick={() => send(s)} disabled={busy} className="badge"
+              style={{ cursor: "pointer", color: "var(--ink-2)", borderColor: "var(--line)", background: "var(--surface)" }}>{s}</button>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={(e) => { e.preventDefault(); send(input); }} style={{ display: "flex", gap: 8 }}>
+        <input className="input" value={input} onChange={(e) => setInput(e.target.value)}
+          placeholder="Tanya apa saja tentang investigasi ini…" disabled={busy} style={{ flex: 1 }} />
+        <Button type="submit" icon="spark" disabled={busy || !input.trim()}>{busy ? "…" : "Kirim"}</Button>
+      </form>
+      <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 8 }}>Jawaban AI berbasis data investigasi (statistik, narasi, entitas-sentimen) — bisa keliru, verifikasi untuk keputusan penting.</div>
+    </Card>
   );
 }
 

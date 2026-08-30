@@ -1,93 +1,181 @@
+// Reports (Fase 4) — laporan intelijen ber-sitasi dari Graph D (nyata, bukan pratinjau).
 import { useEffect, useState } from "react";
-import { api, type AnalysisStats, type Narrative } from "../lib/api";
+import { api, ApiError, type ReportContent, type ReportDoc, type ReportMeta } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
-import { Button, Card, Empty, Pill, PreviewBanner, ProgressBar, SectionTitle, Spinner, Tile } from "../components/ui";
-import { Icon, type IconName } from "../components/icons";
+import { Button, Card, Empty, Pill, Spinner } from "../components/ui";
+import { Icon } from "../components/icons";
 
-const SENT_LABEL: Record<string, string> = { pos: "Positif", positive: "Positif", neg: "Negatif", negative: "Negatif", neu: "Netral", neutral: "Netral", mixed: "Campuran", "?": "?" };
-const SENT_TONE: Record<string, "ok" | "crit" | "muted" | "violet"> = {
-  pos: "ok", positive: "ok", neg: "crit", negative: "crit", neu: "muted", neutral: "muted", mixed: "violet",
-};
+// Ekspor PDF vektor (pdfmake, lazy-load): teks rata kanan-kiri, sumber jadi
+// tautan yang bisa diklik, unduh otomatis dengan nama file (tanpa dialog cetak).
+async function downloadReportPdf(rc: ReportContent) {
+  const doc = rc.content;
+  if (!doc) return;
+  // pdfmake 0.3.x sudah mem-bundle font Roboto default (fontContainer) dan
+  // meng-registernya sendiri — cukup import pdfmake, tanpa vfs_fonts/pm.fonts.
+  const { default: pdfMake } = await import("pdfmake/build/pdfmake");
+  const pm = pdfMake as unknown as {
+    createPdf: (d: unknown) => { download: (n: string) => void };
+  };
 
-function arr(d: Record<string, number> | undefined) {
-  return Object.entries(d || {}).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  const when = rc.created_at ? new Date(rc.created_at) : new Date();
+  const slug = (doc.title || "laporan").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  const filename = `${slug || "Laporan"}-${when.toISOString().slice(0, 10)}.pdf`;
+
+  const content: unknown[] = [
+    { text: doc.title, style: "title" },
+    { text: `${(rc.classification || "").toUpperCase()} · ${rc.status || ""} · ${when.toLocaleString("id", { dateStyle: "medium", timeStyle: "short" })}`, style: "meta" },
+    { text: `${doc.meta?.cited_sources ?? doc.citations.length} sitasi · ${doc.meta?.narratives ?? "-"} narasi`, style: "meta" },
+    { canvas: [{ type: "line", x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 0.5, lineColor: "#d0d0d0" }], margin: [0, 8, 0, 12] },
+  ];
+  for (const s of doc.sections) {
+    content.push({ text: s.heading, style: "h2" });
+    content.push({ text: s.body, style: "body", alignment: "justify" });
+  }
+  if (doc.citations.length) {
+    content.push({ text: `Sumber (${doc.citations.length})`, style: "h2", margin: [0, 14, 0, 6] });
+    content.push({
+      ol: doc.citations.map((c) => ({
+        stack: [
+          { text: `${c.platform || "sumber"}${c.published_at ? " · " + new Date(c.published_at).toLocaleDateString("id") : ""}`, bold: true, fontSize: 9 },
+          ...(c.snippet ? [{ text: c.snippet, color: "#444444", fontSize: 9, margin: [0, 1, 0, 0] }] : []),
+          ...(c.url ? [{ text: c.url, link: c.url, color: "#0E6B62", decoration: "underline", fontSize: 8.5, margin: [0, 1, 0, 0] }] : []),
+        ],
+        margin: [0, 0, 0, 7],
+      })),
+    });
+  }
+
+  const docDefinition = {
+    info: { title: doc.title, creator: "Zandar OSINT" },
+    pageSize: "A4",
+    pageMargins: [50, 54, 50, 54],
+    content,
+    defaultStyle: { font: "Roboto", fontSize: 10.5, lineHeight: 1.4, color: "#1f2937" },
+    styles: {
+      title: { fontSize: 18, bold: true, color: "#0b3b39", margin: [0, 0, 0, 4] },
+      meta: { fontSize: 9, color: "#6b7280" },
+      h2: { fontSize: 13, bold: true, color: "#0E6B62", margin: [0, 12, 0, 5] },
+      body: { fontSize: 10.5, margin: [0, 0, 0, 9] },
+    },
+    footer: (page: number, count: number) => ({
+      text: `Zandar OSINT · Laporan Intelijen · hal ${page}/${count}`,
+      alignment: "center", fontSize: 8, color: "#9ca3af", margin: [0, 8, 0, 0],
+    }),
+  };
+
+  pm.createPdf(docDefinition).download(filename);
 }
-
-const riskTone = (r: number | null) => (r == null ? "muted" : r >= 0.5 ? "crit" : r >= 0.35 ? "warn" : "ok") as "crit" | "warn" | "ok" | "muted";
-
-type SectionId = "exec" | "risk" | "sentiment";
-const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
-  { id: "exec", label: "Ringkasan Eksekutif", icon: "reports" },
-  { id: "risk", label: "Narasi Berisiko", icon: "target" },
-  { id: "sentiment", label: "Sentimen", icon: "comment" },
-];
 
 export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => void }) {
   const { list, selected, choose } = useInvestigations();
-  const [stats, setStats] = useState<AnalysisStats | null>(null);
-  const [nars, setNars] = useState<Narrative[]>([]);
+  const [reports, setReports] = useState<ReportMeta[]>([]);
+  const [active, setActive] = useState<ReportContent | null>(null);
   const [loading, setLoading] = useState(false);
-  const [section, setSection] = useState<SectionId>("exec");
+  const [building, setBuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [note, setNote] = useState("");
+
+  async function exportPdf() {
+    if (!active?.content || exporting) return;
+    setExporting(true);
+    try {
+      await downloadReportPdf(active);
+    } catch {
+      setNote("Gagal membuat PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => { headerSlot(<InvestigationPicker list={list} selected={selected} onChange={choose} />); }, [list, selected]);
-  useEffect(() => { if (selected) load(); }, [selected]);
+  useEffect(() => {
+    if (selected) loadList(selected);
+    else { setReports([]); setActive(null); }
+  }, [selected]);
 
-  async function load() {
-    if (!selected) return;
+  async function loadList(inv: string, openId?: string) {
     setLoading(true);
     try {
-      const [s, n] = await Promise.all([api.analysisStats(selected), api.narratives(selected).catch(() => [])]);
-      setStats(s); setNars(n);
-    } catch { setStats(null); setNars([]); }
+      const r = await api.reports(inv);
+      setReports(r);
+      const target = openId || (r.length ? r[0].id : null);
+      if (target) openReport(target); else setActive(null);
+    } catch { setReports([]); setActive(null); }
     finally { setLoading(false); }
   }
 
-  const investigation = list.find((i) => i.id === selected);
-  const empty = !loading && (!stats || stats.analyzed === 0) && nars.length === 0;
-  const activeSection = SECTIONS.find((s) => s.id === section);
+  async function openReport(id: string) {
+    if (active?.id === id) return;
+    try { setActive(await api.report(id)); }
+    catch { setActive(null); }
+  }
+
+  async function build() {
+    if (!selected || building) return;
+    setBuilding(true); setNote("");
+    try {
+      const res = await api.buildReport(selected);
+      setNote(`Laporan dibuat · ${res.sections} bagian · ${res.cited_sources} sitasi`);
+      await loadList(selected, res.report_id);
+    } catch (e) {
+      setNote(
+        e instanceof ApiError && e.status === 422
+          ? "Bangun narasi dulu (halaman AI Analysis / Agent Monitor) sebelum menyusun laporan."
+          : "Gagal membuat laporan.",
+      );
+    } finally { setBuilding(false); }
+  }
 
   return (
     <div>
-      <PreviewBanner phase="Fase 4">Laporan penuh (Graph D: sitasi + ekspor PDF) menyusul di Fase 4. Di bawah ini ringkasan otomatis dari NARASI & ANALISIS nyata.</PreviewBanner>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 14 }}>
-        <Button variant="ghost" icon="refresh" onClick={load}>Segarkan</Button>
-        <button className="btn btn-ghost" type="button" disabled title="Fase 4">
-          <Icon name="download" size={16} /> Ekspor
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        {note && <span style={{ fontSize: 12, color: note.startsWith("Gagal") || note.startsWith("Bangun") ? "var(--crit)" : "var(--muted)", marginRight: "auto" }}>{note}</span>}
+        {!note && <span style={{ marginRight: "auto" }} />}
+        <Button variant="ghost" icon="download" onClick={exportPdf} disabled={!active?.content || exporting}>
+          {exporting ? "Menyiapkan…" : "Ekspor PDF"}
+        </Button>
+        <Button variant="ghost" icon="refresh" onClick={() => selected && loadList(selected)}>Segarkan</Button>
+        <Button icon="reports" onClick={build} disabled={!selected || building}>
+          {building ? "Menyusun…" : "Bangun Laporan"}
+        </Button>
       </div>
 
-      {loading && !stats ? (
+      {building && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: "var(--radius-sm)", background: "var(--accent-soft)", color: "var(--accent-ink)", fontSize: 12.5 }}>
+          <Spinner size={15} /> Graph D menyusun laporan ber-sitasi dari narasi & bukti… (±15–30 detik)
+        </div>
+      )}
+
+      {!selected ? (
+        <Empty icon="reports">Pilih investigasi untuk melihat atau menyusun laporan.</Empty>
+      ) : loading && reports.length === 0 ? (
         <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}><Spinner size={28} /></div>
-      ) : empty ? (
-        <Empty icon="reports">Jalankan analisis &amp; bangun narasi dulu.</Empty>
+      ) : reports.length === 0 ? (
+        <Empty icon="reports">Belum ada laporan. Klik <b>Bangun Laporan</b> untuk membuat laporan intelijen ber-sitasi dari narasi investigasi ini.</Empty>
       ) : (
-        <div className="grid-split" style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16, alignItems: "start" }}>
+        <div className="grid-split" style={{ display: "grid", gridTemplateColumns: "270px 1fr", gap: 16, alignItems: "start" }}>
           <Card className="rise rise-1" style={{ padding: 8 }}>
-            {SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSection(s.id)}
-                className={`nav-item${section === s.id ? " active" : ""}`}
-                style={{
-                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                  fontSize: 13, padding: "9px 12px", borderRadius: 9, border: "none", background: "transparent", cursor: "pointer",
-                }}
-              >
-                <Icon name={s.icon} size={15} />{s.label}
+            {reports.map((r) => (
+              <button key={r.id} type="button" onClick={() => openReport(r.id)}
+                className={`nav-item${active?.id === r.id ? " active" : ""}`}
+                style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, padding: "10px 12px", borderRadius: 9, border: "none", background: active?.id === r.id ? "var(--accent-soft)" : "transparent", cursor: "pointer" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Icon name="reports" size={14} />
+                  <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {r.created_at ? new Date(r.created_at).toLocaleString("id", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "Laporan"}
+                  </span>
+                </div>
+                <div style={{ marginTop: 5, display: "flex", gap: 5 }}>
+                  <Pill tone={r.status === "final" ? "ok" : "muted"}>{r.status}</Pill>
+                  <Pill tone="warn">{r.classification}</Pill>
+                </div>
               </button>
             ))}
           </Card>
 
-          <Card className="rise rise-2" style={{ padding: 18 }}>
-            <SectionTitle right={investigation ? <span style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>{investigation.title}</span> : undefined}>
-              {activeSection?.label}
-            </SectionTitle>
-
-            {section === "exec" && <ExecSummary stats={stats} narCount={nars.length} />}
-            {section === "risk" && <RiskList nars={nars} />}
-            {section === "sentiment" && <SentimentBars sentiment={stats?.sentiment} />}
+          <Card className="rise rise-2" style={{ padding: 20 }}>
+            {active?.content ? <ReportView doc={active.content} meta={active} />
+              : <div style={{ display: "grid", placeItems: "center", padding: 40 }}><Spinner size={24} /></div>}
           </Card>
         </div>
       )}
@@ -95,77 +183,60 @@ export function Reports({ headerSlot }: { headerSlot: (n: React.ReactNode) => vo
   );
 }
 
-function ExecSummary({ stats, narCount }: { stats: AnalysisStats | null; narCount: number }) {
-  if (!stats) return <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Tak ada data.</div>;
-  const coverage = Math.round(stats.coverage * 100);
+function ReportView({ doc, meta }: { doc: ReportDoc; meta: ReportContent }) {
   return (
     <div>
-      <p style={{ fontSize: 13, lineHeight: 1.65, color: "var(--ink-2)", margin: "0 0 16px" }}>
-        Dari <b className="tnum">{stats.total.toLocaleString("id")}</b> komentar terkumpul, <b className="tnum">{stats.analyzed.toLocaleString("id")}</b> ({coverage}%) telah dianalisis.
-        Sistem mengidentifikasi <b className="tnum">{narCount}</b> narasi{stats.bot_suspect > 0 ? <> dan <b className="tnum">{stats.bot_suspect}</b> akun tersangka bot</> : null}.
-      </p>
-      <div className="grid-stats">
-        <Tile label="Total komentar" value={stats.total.toLocaleString("id")} icon="comment" />
-        <Tile label="Dianalisis" value={stats.analyzed.toLocaleString("id")} icon="analysis" sub={`${coverage}% cakupan`} />
-        <Tile label="Rerata sentimen" value={stats.avg_sentiment != null ? stats.avg_sentiment.toFixed(2) : "–"} icon="spark" tone={stats.avg_sentiment != null && stats.avg_sentiment < -0.1 ? "crit" : undefined} />
-        <Tile label="Tersangka bot" value={stats.bot_suspect} icon="agents" tone={stats.bot_suspect > 0 ? "warn" : undefined} />
-        <Tile label="Narasi" value={narCount || "–"} icon="graph" />
+      <div style={{ marginBottom: 18, borderBottom: "1px solid var(--line)", paddingBottom: 14 }}>
+        <h2 style={{ margin: 0, fontSize: 19, lineHeight: 1.3 }}>{doc.title}</h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 8 }}>
+          <Pill tone="warn">{meta.classification}</Pill>
+          <Pill tone={meta.status === "final" ? "ok" : "muted"}>{meta.status}</Pill>
+          {meta.created_at && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{new Date(meta.created_at).toLocaleString("id", { dateStyle: "medium", timeStyle: "short" })}</span>}
+          <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--faint)" }}>{doc.meta?.cited_sources ?? doc.citations.length} sitasi · {doc.meta?.narratives ?? "–"} narasi</span>
+        </div>
       </div>
-    </div>
-  );
-}
 
-function RiskList({ nars }: { nars: Narrative[] }) {
-  if (nars.length === 0) return <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Belum ada narasi.</div>;
-  const sorted = [...nars].sort((a, b) => (b.risk_score ?? -1) - (a.risk_score ?? -1));
-  const shown = sorted.slice(0, 10);
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>{sorted.length} narasi · diurutkan berdasarkan skor risiko</div>
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {shown.map((n, i) => (
-          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < shown.length - 1 ? "1px solid var(--line-2)" : "none" }}>
-            <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700 }}>{i + 1}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
-              {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
-            </div>
-            {n.assessment?.authenticity != null && (
-              <span className="hide-sm tnum" title="Otentisitas (0 organik .. 1 terkoordinasi)" style={{ fontSize: 11, color: "var(--muted)" }}>
-                koord {Math.round((n.assessment.authenticity || 0) * 100)}%
-              </span>
-            )}
-            <span className="tnum" style={{ fontSize: 11, color: "var(--muted)" }}>{n.evidence_count} bukti</span>
-            <Pill tone={riskTone(n.risk_score)} dot>risiko {n.risk_score != null ? n.risk_score.toFixed(2) : "–"}</Pill>
-          </div>
-        ))}
-      </div>
-      {sorted.length > shown.length && (
-        <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 10 }}>+{sorted.length - shown.length} narasi lainnya</div>
+      {doc.sections.map((s, i) => (
+        <section key={i} style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 15, margin: "0 0 8px", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "var(--accent)" }}><Icon name="target" size={15} /></span>{s.heading}
+          </h3>
+          {renderBody(s.body)}
+        </section>
+      ))}
+
+      {doc.citations.length > 0 && (
+        <section style={{ marginTop: 6, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+          <h3 style={{ fontSize: 14, margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "var(--accent)" }}><Icon name="audit" size={15} /></span>Sumber ({doc.citations.length})
+          </h3>
+          <ol style={{ margin: 0, paddingLeft: 22, display: "flex", flexDirection: "column", gap: 9 }}>
+            {doc.citations.map((c) => (
+              <li key={c.n} id={`cit-${c.n}`} value={c.n} style={{ fontSize: 12, color: "var(--muted)" }}>
+                <span style={{ fontWeight: 600, color: "var(--ink-2)" }}>{c.platform || "sumber"}</span>
+                {c.published_at && <span> · {new Date(c.published_at).toLocaleDateString("id")}</span>}
+                {c.snippet && <div style={{ fontSize: 11.5, lineHeight: 1.5, margin: "2px 0" }}>{c.snippet}</div>}
+                {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>buka sumber ↗</a>}
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </div>
   );
 }
 
-function SentimentBars({ sentiment }: { sentiment: Record<string, number> | undefined }) {
-  const items = arr(sentiment);
-  if (items.length === 0) return <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Tak ada data sentimen.</div>;
-  const total = items.reduce((s, i) => s + i.value, 0) || 1;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {items.map((it) => {
-        const pct = Math.round((it.value / total) * 100);
-        const tone = SENT_TONE[it.name] ?? "muted";
-        return (
-          <div key={it.name}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 7 }}>
-              <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{SENT_LABEL[it.name] || it.name}</span>
-              <span className="tnum" style={{ color: "var(--muted)" }}>{it.value.toLocaleString("id")} · {pct}%</span>
-            </div>
-            <ProgressBar value={pct} tone={tone} />
-          </div>
+// Render body: paragraf + token sitasi [n] jadi tautan superskrip ke daftar sumber.
+function renderBody(body: string) {
+  return body.split(/\n{2,}|\n/).filter((p) => p.trim()).map((para, pi) => (
+    <p key={pi} style={{ fontSize: 13, lineHeight: 1.7, color: "var(--ink-2)", margin: "0 0 12px" }}>
+      {para.split(/(\[\d+\])/).map((seg, si) => {
+        const m = seg.match(/^\[(\d+)\]$/);
+        if (m) return (
+          <a key={si} href={`#cit-${m[1]}`} style={{ fontSize: 10, verticalAlign: "super", fontWeight: 700, color: "var(--accent)", textDecoration: "none", padding: "0 1px" }}>[{m[1]}]</a>
         );
+        return <span key={si}>{seg}</span>;
       })}
-    </div>
-  );
+    </p>
+  ));
 }

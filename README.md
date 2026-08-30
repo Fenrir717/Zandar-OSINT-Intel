@@ -7,16 +7,16 @@ PostgreSQL (sumber kebenaran) · Celery/Redis (koleksi) · MinIO (raw data lake)
 Prinsip arsitektur (PRD §6): **LangGraph berpikir, Celery bekerja, model lokal
 mengklasifikasi, database mengingat.**
 
-## Status: Fase 0 — Fondasi
+## Status: Fase 5 — Verifikasi Klaim (fase inti 0–5 selesai)
 
 | Fase | Isi | Status |
 |------|-----|--------|
-| 0 | Monorepo, docker-compose, FastAPI + JWT/RBAC, Alembic, CI | ✅ ini |
+| 0 | Monorepo, docker-compose, FastAPI + JWT/RBAC, Alembic, CI | ✅ |
 | 1 | 11 adapter koleksi, enrichment deterministik, worker+beat, Comment Explorer | ✅ |
-| 2 | IndoBERT/Flash-LLM, Qdrant, LangGraph Graph A & C | ⬜ |
-| 3 | Neo4j, deteksi CIB, forensik narasi (kuadran) | ⬜ |
-| 4 | Graph D (laporan ber-sitasi), hardening | ⬜ |
-| 5 | Graph E (verifikasi klaim) | ⬜ |
+| 2 | IndoBERT/Flash-LLM, Qdrant, LangGraph Graph A & C | ✅ |
+| 3 | Neo4j, deteksi CIB, forensik narasi (kuadran) | ✅ |
+| 4 | Graph D (laporan ber-sitasi), hardening | ✅ |
+| 5 | Graph E (verifikasi klaim vs ground-truth resmi BPS/BMKG) | ✅ ini |
 
 ## Adapter koleksi (11 platform, 3 tier akses)
 

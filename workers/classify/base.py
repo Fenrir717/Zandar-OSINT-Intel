@@ -11,11 +11,13 @@ INTENTS = ("informational", "opinion", "question", "criticism", "support", "spam
 @dataclass
 class Label:
     sentiment: str  # pos|neg|neu|mixed
-    sentiment_score: float  # -1..1
+    sentiment_score: float  # -1..1 (arah × keyakinan)
     emotion: str
     intent: str
     toxicity: float  # 0..1
     model_version: str
+    confidence: float = 0.5   # keyakinan model pada label sentimen (0..1)
+    is_sarcasm: bool = False  # True bila refine mendeteksi sarkasme/ironi & mengoreksi label
 
 
 class Classifier(ABC):

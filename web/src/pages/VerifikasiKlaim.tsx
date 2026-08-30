@@ -1,103 +1,188 @@
+// Verifikasi Klaim (Fase 5) — verdict DRAF dari Graph E: bukti internal + ground-truth resmi (BPS/BMKG).
 import { useEffect, useState } from "react";
-import { api, type Narrative } from "../lib/api";
+import { api, ApiError, type ClaimVerdict } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
-import { Button, Card, Empty, Pill, PreviewBanner, SectionTitle, Spinner, Tile } from "../components/ui";
+import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
 
-type VerdictTone = "ok" | "crit" | "muted" | "warn";
-const VERDICTS: { label: string; tone: VerdictTone; desc: string }[] = [
-  { label: "Didukung", tone: "ok", desc: "Bukti yang ditemukan mendukung klaim." },
-  { label: "Dibantah", tone: "crit", desc: "Bukti yang ditemukan membantah klaim." },
-  { label: "Tak Cukup Bukti", tone: "muted", desc: "Bukti yang tersedia belum cukup untuk memutuskan." },
-  { label: "Bertentangan", tone: "warn", desc: "Bukti yang ditemukan saling bertentangan satu sama lain." },
-];
+type Tone = "ok" | "crit" | "muted" | "warn";
+const VERDICT: Record<string, { label: string; tone: Tone }> = {
+  supported: { label: "Didukung", tone: "ok" },
+  refuted: { label: "Dibantah", tone: "crit" },
+  conflicting: { label: "Bertentangan", tone: "warn" },
+  insufficient: { label: "Tak Cukup Bukti", tone: "muted" },
+};
 
 export function VerifikasiKlaim({ headerSlot }: { headerSlot: (n: React.ReactNode) => void }) {
   const { list, selected, choose } = useInvestigations();
-  const [nars, setNars] = useState<Narrative[]>([]);
+  const [claims, setClaims] = useState<ClaimVerdict[]>([]);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [note, setNote] = useState("");
 
   useEffect(() => { headerSlot(<InvestigationPicker list={list} selected={selected} onChange={choose} />); }, [list, selected]);
-  useEffect(() => { if (selected) load(); }, [selected]);
+  useEffect(() => {
+    if (selected) load(selected);
+    else setClaims([]);
+  }, [selected]);
 
-  async function load() {
-    if (!selected) return;
+  async function load(inv: string) {
     setLoading(true);
-    try {
-      const n = await api.narratives(selected);
-      setNars(n);
-    } catch { setNars([]); }
+    try { setClaims(await api.claims(inv)); }
+    catch { setClaims([]); }
     finally { setLoading(false); }
   }
 
-  const sorted = [...nars].sort((a, b) => (b.risk_score ?? -1) - (a.risk_score ?? -1));
-  const evidenceTotal = nars.reduce((s, n) => s + (n.evidence_count || 0), 0);
-  const empty = !loading && nars.length === 0;
+  async function verify() {
+    if (!selected || verifying) return;
+    setVerifying(true); setNote("");
+    try {
+      const res = await api.verifyClaims(selected);
+      setNote(`Selesai · ${res.claims} klaim dinilai · ${res.with_authoritative} pakai sumber resmi`);
+      await load(selected);
+    } catch (e) {
+      setNote(
+        e instanceof ApiError && e.status === 422
+          ? "Bangun narasi dulu (AI Analysis / Agent Monitor) sebelum verifikasi klaim."
+          : "Gagal memverifikasi klaim.",
+      );
+    } finally { setVerifying(false); }
+  }
+
+  const counts = {
+    supported: claims.filter((c) => c.verdict === "supported").length,
+    disputed: claims.filter((c) => c.verdict === "refuted" || c.verdict === "conflicting").length,
+    withAuth: claims.filter((c) => c.authoritative.length > 0).length,
+  };
+  const empty = !loading && claims.length === 0;
 
   return (
     <div>
-      <PreviewBanner phase="Fase 5">
-        Ekstraksi &amp; verifikasi klaim (Graph E) hadir di Fase 5. Di bawah: kandidat klaim NYATA dari narasi + taksonomi verdict yang direncanakan.
-      </PreviewBanner>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
-        <Button variant="ghost" icon="refresh" onClick={load}>Segarkan</Button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <span style={{ marginRight: "auto", fontSize: 12, color: note.startsWith("Gagal") || note.startsWith("Bangun") ? "var(--crit)" : "var(--muted)" }}>{note}</span>
+        <Button variant="ghost" icon="refresh" onClick={() => selected && load(selected)}>Segarkan</Button>
+        <Button icon="audit" onClick={verify} disabled={!selected || verifying}>
+          {verifying ? "Memverifikasi…" : "Verifikasi Klaim"}
+        </Button>
       </div>
 
-      <div className="grid-stats" style={{ marginBottom: 16 }}>
-        <div className="rise rise-1"><Tile label="Kandidat klaim" value={nars.length || "–"} icon="audit" /></div>
-        <div className="rise rise-2"><Tile label="Terverifikasi" value={0} icon="reports" /></div>
-        <div className="rise rise-3"><Tile label="Menunggu" value={nars.length || "–"} tone="warn" icon="spark" /></div>
-        <div className="rise rise-4"><Tile label="Bukti tersedia" value={evidenceTotal} icon="comment" /></div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "10px 14px", marginBottom: 14, borderRadius: "var(--radius-sm)", background: "var(--surface-2)", border: "1px solid var(--line)", fontSize: 11.5, color: "var(--muted)", lineHeight: 1.5 }}>
+        <Icon name="audit" size={15} style={{ flexShrink: 0, marginTop: 1, color: "var(--faint)" }} />
+        <span>Verdict adalah <b>penilaian AI berstatus draf</b> — dinilai terhadap bukti terkumpul <b>plus sumber resmi</b> (BPS statistik, BMKG kebencanaan), memakai taksonomi AVeriTeC. Perlu tinjauan analis sebelum dijadikan kesimpulan.</span>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Card className="rise rise-1" style={{ padding: 18 }}>
-          <SectionTitle right={<span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 500 }}>direncanakan · Fase 5</span>}>
-            Taksonomi Verdict (AVeriTeC)
-          </SectionTitle>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-            {VERDICTS.map((v) => (
-              <div key={v.label} style={{ padding: 12, borderRadius: "var(--radius-sm)", border: "1px solid var(--line)", background: "var(--surface-2)" }}>
-                <Pill tone={v.tone} dot>{v.label}</Pill>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 9, lineHeight: 1.5 }}>{v.desc}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
+      {verifying && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", marginBottom: 14, borderRadius: "var(--radius-sm)", background: "var(--accent-soft)", color: "var(--accent-ink)", fontSize: 12.5 }}>
+          <Spinner size={15} /> Graph E menilai klaim vs bukti internal + ground-truth resmi… (±30–60 detik)
+        </div>
+      )}
 
-        <Card className="rise rise-2" style={{ padding: 18 }}>
-          <SectionTitle right={sorted.length > 0 ? <span style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 500 }}>{sorted.length} narasi · diurutkan berdasarkan skor risiko</span> : undefined}>
-            Kandidat Klaim
-          </SectionTitle>
-          <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 12, lineHeight: 1.5 }}>
-            Narasi di bawah adalah kandidat yang diusulkan untuk diverifikasi sebagai klaim. Ekstraksi klaim, pencarian bukti, dan penentuan verdict adalah pekerjaan Fase 5 — belum berjalan.
-          </div>
+      {claims.length > 0 && (
+        <div className="grid-stats" style={{ marginBottom: 16 }}>
+          <div className="rise rise-1"><Tile label="Klaim dinilai" value={claims.length} icon="audit" /></div>
+          <div className="rise rise-2"><Tile label="Didukung" value={counts.supported} icon="reports" tone={undefined} /></div>
+          <div className="rise rise-3"><Tile label="Dibantah / bertentangan" value={counts.disputed} icon="target" tone={counts.disputed ? "crit" : undefined} /></div>
+          <div className="rise rise-4"><Tile label="Pakai sumber resmi" value={counts.withAuth} icon="spark" /></div>
+        </div>
+      )}
 
-          {loading ? (
-            <div style={{ display: "grid", placeItems: "center", padding: "48px 0" }}><Spinner size={24} /></div>
-          ) : empty ? (
-            <Empty icon="audit">Belum ada narasi untuk investigasi ini — bangun narasi dulu (Agent Monitor).</Empty>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {sorted.map((n, i) => (
-                <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: i < sorted.length - 1 ? "1px solid var(--line-2)" : "none", flexWrap: "wrap" }}>
-                  <span className="tnum" style={{ width: 20, fontSize: 12, color: "var(--faint)", fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.label}</div>
-                    {n.summary && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.summary}</div>}
-                  </div>
-                  <span className="hide-sm tnum" style={{ fontSize: 11, color: "var(--muted)", flexShrink: 0 }}>{n.evidence_count} bukti</span>
-                  <Pill tone="muted">Menunggu verifikasi</Pill>
-                  <button className="btn btn-ghost" type="button" disabled title="Fase 5" style={{ flexShrink: 0, padding: "6px 12px", fontSize: 12 }}>
-                    <Icon name="audit" size={14} /> Verifikasi
-                  </button>
-                </div>
-              ))}
+      {!selected ? (
+        <Empty icon="audit">Pilih investigasi untuk memverifikasi klaimnya.</Empty>
+      ) : loading && claims.length === 0 ? (
+        <div style={{ display: "grid", placeItems: "center", padding: "80px 0" }}><Spinner size={28} /></div>
+      ) : empty ? (
+        <Empty icon="audit">Belum ada klaim terverifikasi. Klik <b>Verifikasi Klaim</b> untuk menilai narasi terhadap bukti internal &amp; sumber resmi.</Empty>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {claims.map((c, i) => <ClaimCard key={c.id} c={c} delay={(i % 4) + 1} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ClaimCard({ c, delay }: { c: ClaimVerdict; delay: number }) {
+  const [verdict, setVerdict] = useState(c.verdict || "insufficient");
+  const [status, setStatus] = useState(c.review_status || "draft");
+  const [busy, setBusy] = useState(false);
+  const reviewed = status === "reviewed";
+  const v = VERDICT[verdict] ?? { label: verdict, tone: "muted" as Tone };
+
+  async function review(next: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await api.reviewClaim(c.id, { review_status: next, verdict });
+      setStatus(r.review_status);
+      if (r.verdict) setVerdict(r.verdict);
+    } catch { /* biarkan; UI tetap */ }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Card className={`rise rise-${delay}`} style={{ padding: 16, borderColor: reviewed ? "var(--ok)" : undefined }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4 }}>{c.claim}</div>
+          {c.narrative_label && (
+            <div style={{ fontSize: 11.5, color: "var(--faint)", marginTop: 3, display: "flex", alignItems: "center", gap: 5 }}>
+              <Icon name="graph" size={12} />dari narasi: {c.narrative_label}
             </div>
           )}
-        </Card>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <Pill tone={v.tone} dot>{v.label}</Pill>
+          {reviewed ? <Pill tone="ok">✓ ditinjau</Pill> : <Pill tone="warn">draf</Pill>}
+        </div>
       </div>
-    </div>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "10px 0", fontSize: 11.5, color: "var(--muted)" }}>
+        {c.veracity != null && (
+          <span>Kebenaran (veracity) <b className="tnum" style={{ color: "var(--ink-2)" }}>{Math.round(c.veracity * 100)}%</b></span>
+        )}
+        {c.confidence != null && (
+          <span>Keyakinan <b className="tnum" style={{ color: "var(--ink-2)" }}>{Math.round(c.confidence * 100)}%</b></span>
+        )}
+      </div>
+
+      {c.rationale && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--ink-2)", borderLeft: "2px solid var(--line)", paddingLeft: 11, marginBottom: c.authoritative.length ? 10 : 0 }}>
+          {c.rationale}
+        </div>
+      )}
+
+      {c.authoritative.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--faint)" }}>Sumber resmi:</span>
+          {c.authoritative.map((a, i) => (
+            a.url ? (
+              <a key={i} href={a.url} target="_blank" rel="noopener noreferrer" className="badge"
+                style={{ color: "var(--accent-ink)", borderColor: "var(--accent)", background: "var(--accent-soft)", textDecoration: "none" }}>
+                {a.source.toUpperCase()}{a.title ? ` · ${a.title.slice(0, 32)}` : ""} ↗
+              </a>
+            ) : (
+              <span key={i} className="badge" style={{ color: "var(--accent-ink)", borderColor: "var(--accent)", background: "var(--accent-soft)" }}>
+                {a.source.toUpperCase()}{a.title ? ` · ${a.title.slice(0, 32)}` : ""}
+              </span>
+            )
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line-2)", flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11, color: "var(--faint)" }}>Tinjauan analis:</span>
+        <select className="select" value={verdict} onChange={(e) => setVerdict(e.target.value)} disabled={busy || reviewed}
+          style={{ width: "auto", fontSize: 12, padding: "5px 8px" }}>
+          {Object.entries(VERDICT).map(([k, val]) => <option key={k} value={k}>{val.label}</option>)}
+        </select>
+        {reviewed ? (
+          <Button variant="ghost" onClick={() => review("draft")} disabled={busy}>Buka lagi</Button>
+        ) : (
+          <Button icon="reports" onClick={() => review("reviewed")} disabled={busy}>
+            {busy ? "Menyimpan…" : "Tandai ditinjau"}
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }

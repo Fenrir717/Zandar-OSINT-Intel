@@ -1,5 +1,7 @@
 // Primitif UI. Semua via token tema + kelas .card/.btn/.badge (hover & motion di CSS).
+import { useEffect } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons";
 
 type Tone = "accent" | "ok" | "warn" | "crit" | "muted" | "info" | "violet";
@@ -54,7 +56,7 @@ export function Tile({ label, value, tone, icon, delta, sub }: {
 }) {
   const color = tone === "crit" ? "var(--crit)" : tone === "warn" ? "var(--warn)" : "var(--ink)";
   return (
-    <div className="card card-hover stat" style={{ padding: "15px 17px" }}>
+    <div className="card card-hover stat" style={{ padding: "15px 17px", height: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".07em", color: "var(--muted)", fontWeight: 700 }}>{label}</div>
@@ -108,6 +110,55 @@ export function PreviewBanner({ phase, children }: { phase: string; children?: R
       <Icon name="spark" size={15} style={{ flexShrink: 0 }} />
       <span><b>Pratinjau {phase}</b>{children ? " — " : ""}{children}</span>
     </div>
+  );
+}
+
+// Modal reusable — portal ke body (hindari containing-block dari .page yang ter-transform).
+export function Modal({ title, onClose, children, footer, busy }: {
+  title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; busy?: boolean;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, busy]);
+
+  return createPortal(
+    <div onClick={() => { if (!busy) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, display: "grid", placeItems: "center", padding: 20,
+        background: "rgba(8,18,20,.52)", backdropFilter: "blur(3px)", animation: "fadeIn .16s ease",
+      }}>
+      <div onClick={(e) => e.stopPropagation()} className="card rise"
+        style={{ width: 460, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto", boxShadow: "var(--sh-lg)" }}>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          padding: "14px 18px", borderBottom: "1px solid var(--line)", position: "sticky", top: 0,
+          background: "var(--surface)", zIndex: 1,
+        }}>
+          <b style={{ fontSize: 15 }}>{title}</b>
+          <button className="icon-btn" onClick={onClose} disabled={busy} aria-label="Tutup"><Icon name="x" size={16} /></button>
+        </div>
+        <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
+        {footer && (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 18px", borderTop: "1px solid var(--line)" }}>
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Field — label + kontrol form, konsisten spacing.
+export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{label}</span>
+      {children}
+      {hint && <span style={{ fontSize: 11, color: "var(--faint)" }}>{hint}</span>}
+    </label>
   );
 }
 

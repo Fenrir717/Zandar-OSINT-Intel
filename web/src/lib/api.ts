@@ -47,6 +47,8 @@ export interface Investigation {
 export interface Comment {
   id: string; investigation_id: string; platform: string; author_hash: string;
   content: string; lang: string | null; url: string | null; published_at: string | null;
+  sentiment?: string | null; sentiment_score?: number | null;
+  confidence?: number | null; is_sarcasm?: boolean;
 }
 export interface CommentStats {
   total: number; by_platform: Record<string, number>; by_lang: Record<string, number>;
@@ -72,7 +74,14 @@ export interface SystemService {
 export interface SystemUser {
   id: string; name: string; email: string; role: string; created_at: string | null;
 }
-export interface GraphNode { id: string; label: string; type: string; mentions: number; community: number; }
+export interface GraphNode {
+  id: string; label: string; type: string; mentions: number; community: number;
+  pos?: number; neg?: number; neu?: number; sent_score?: number | null; emotion?: string | null;
+}
+export interface EntitySentiment {
+  name: string; type: string; mentions: number;
+  pos: number; neg: number; neu: number; sent_score: number | null; emotion: string | null;
+}
 export interface GraphEdge { source: string; target: string; weight: number; }
 export interface KnowledgeGraph {
   nodes: GraphNode[]; edges: GraphEdge[]; stats: { entities: number; relations: number };
@@ -105,7 +114,33 @@ export interface AnalysisStats {
   total: number; analyzed: number; coverage: number;
   sentiment: Record<string, number>; emotion: Record<string, number>;
   intent: Record<string, number>; avg_sentiment: number | null;
-  bot_suspect: number; sentiment_trend: { day: string; avg: number; count: number }[];
+  bot_suspect: number; avg_confidence: number | null; sarcasm: number; low_confidence: number;
+  sentiment_trend: { day: string; avg: number; count: number }[];
+}
+export interface ReportMeta {
+  id: string; title: string; status: string; classification: string;
+  created_at: string | null; generated_by_run: string | null;
+}
+export interface ReportCitation {
+  n: number; url: string | null; platform: string | null;
+  published_at: string | null; snippet: string | null;
+}
+export interface ReportDoc {
+  title: string; sections: { heading: string; body: string }[];
+  citations: ReportCitation[]; meta: Record<string, number>;
+}
+export interface ReportContent {
+  id: string; title: string; status: string; classification: string;
+  created_at: string | null; content: ReportDoc | null;
+}
+export interface ClaimAuthoritative {
+  source: string; title: string | null; url: string | null; credibility: number | null;
+}
+export interface ClaimVerdict {
+  id: string; narrative_id: string | null; narrative_label: string | null;
+  claim: string; check_worthy: boolean; verdict: string | null;
+  confidence: number | null; veracity: number | null; rationale: string | null;
+  authoritative: ClaimAuthoritative[]; review_status: string | null; created_at: string | null;
 }
 
 // ---- endpoint ----
@@ -123,7 +158,33 @@ export const api = {
   },
   me: () => req<User>("/auth/me"),
   investigations: () => req<Investigation[]>("/investigations"),
+  createInvestigation: (body: {
+    title: string; description?: string; priority?: string;
+    data_policy?: string; budget_cap_usd?: number | null; project_id?: string;
+  }) =>
+    req<Investigation>("/investigations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
   projects: () => req<Project[]>("/projects"),
+  createProject: (name: string) =>
+    req<Project>("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+  createCollection: (body: {
+    investigation_id: string; platform: string;
+    query: Record<string, unknown>; schedule_cron?: string | null;
+  }) =>
+    req<Collection>("/collections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  runCollection: (col: string) =>
+    req<Run>(`/collections/${col}/run`, { method: "POST" }),
   commentStats: (inv: string) => req<CommentStats>(`/comments/stats?investigation_id=${inv}`),
   searchComments: (params: Record<string, string>) =>
     req<Comment[]>("/comments/search?" + new URLSearchParams(params).toString()),
@@ -141,6 +202,13 @@ export const api = {
   narratives: (inv: string) => req<Narrative[]>(`/investigations/${inv}/narratives`),
   narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
+  entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
+  chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
+    req<{ answer: string }>(`/analysis/${inv}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, history }),
+    }),
   systemStatus: () => req<SystemService[]>("/system/status"),
   systemUsers: () => req<SystemUser[]>("/system/users"),
   graphData: (inv: string) => req<KnowledgeGraph>(`/investigations/${inv}/graph`),
@@ -148,6 +216,25 @@ export const api = {
     req<{ task_id: string; status: string }>(`/investigations/${inv}/graph/build`, { method: "POST" }),
   runAnalysis: (inv: string) =>
     req<{ task_id: string; status: string }>(`/analysis/${inv}/run`, { method: "POST" }),
+  reports: (inv: string) => req<ReportMeta[]>(`/investigations/${inv}/reports`),
+  report: (id: string) => req<ReportContent>(`/reports/${id}`),
+  buildReport: (inv: string) =>
+    req<{ report_id: string; cited_sources: number; sections: number }>(
+      `/investigations/${inv}/reports/build`, { method: "POST" },
+    ),
+  claims: (inv: string) => req<ClaimVerdict[]>(`/investigations/${inv}/claims`),
+  verifyClaims: (inv: string) =>
+    req<{ claims: number; with_authoritative: number }>(
+      `/investigations/${inv}/claims/verify`, { method: "POST" },
+    ),
+  reviewClaim: (claimId: string, body: { review_status: string; verdict?: string }) =>
+    req<{ claim_id: string; review_status: string; verdict: string | null }>(
+      `/claims/${claimId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
 };
 
 // SSE agent-run live — pakai fetch streaming (bukan EventSource) agar bisa kirim

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Project } from "../lib/api";
-import { Card, Empty, Pill } from "../components/ui";
+import { api, ApiError, type Project } from "../lib/api";
+import { Button, Card, Empty, Field, Modal, Pill } from "../components/ui";
 import { Icon } from "../components/icons";
 
 export function Projects({ headerSlot }: { headerSlot: (n: React.ReactNode) => void }) {
   const [list, setList] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => { headerSlot(null); }, []);
 
@@ -27,10 +28,18 @@ export function Projects({ headerSlot }: { headerSlot: (n: React.ReactNode) => v
 
   return (
     <div>
-      <div className="rise" style={{ marginBottom: 16 }}>
+      <div className="rise" style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama proyek…"
-          className="input" style={{ maxWidth: 320 }} />
+          className="input" style={{ flex: 1, minWidth: 220, maxWidth: 320 }} />
+        <Button icon="plus" onClick={() => setShowNew(true)}>Proyek Baru</Button>
       </div>
+
+      {showNew && (
+        <NewProjectModal
+          onClose={() => setShowNew(false)}
+          onCreated={(p) => { setList((prev) => [p, ...prev]); setShowNew(false); }}
+        />
+      )}
 
       {loading ? (
         <Empty icon="projects">Memuat proyek…</Empty>
@@ -44,6 +53,50 @@ export function Projects({ headerSlot }: { headerSlot: (n: React.ReactNode) => v
         </div>
       )}
     </div>
+  );
+}
+
+function NewProjectModal({ onClose, onCreated }: {
+  onClose: () => void; onCreated: (p: Project) => void;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const valid = name.trim().length >= 2;
+
+  async function submit() {
+    if (!valid || busy) return;
+    setBusy(true); setErr("");
+    try {
+      onCreated(await api.createProject(name.trim()));
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 422 ? "Nama minimal 2 karakter." : "Gagal membuat proyek.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Proyek Baru"
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Batal</Button>
+          <Button icon="plus" onClick={submit} disabled={!valid || busy}>
+            {busy ? "Menyimpan…" : "Buat"}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Nama proyek" hint="Wadah untuk mengelompokkan investigasi terkait.">
+        <input className="input" value={name} autoFocus maxLength={255}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          placeholder="mis. Pemantauan Pemilu 2029" />
+      </Field>
+      {err && <div style={{ fontSize: 12, color: "var(--crit)" }}>{err}</div>}
+    </Modal>
   );
 }
 

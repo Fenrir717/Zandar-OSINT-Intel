@@ -34,7 +34,8 @@ async def build(investigation_id: uuid.UUID, session: DbSession, user: CurrentUs
 
     from workers.tasks import build_graph as task
 
-    t = task.delay(str(investigation_id))
+    from api.util import enqueue
+    t = enqueue(task, str(investigation_id))
     return BuildAccepted(task_id=t.id, status="queued")
 
 

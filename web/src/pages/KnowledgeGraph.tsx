@@ -16,6 +16,14 @@ const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…
 // palet komunitas (distinct, terbaca di light & dark); komunitas kecil → abu-abu
 const COMM = ["#0E6B62", "#2C6E8F", "#6B4FB0", "#9A6B10", "#2E7D4F", "#B23B32", "#3B7A8C", "#8A5A2B"];
 
+// Warna node per skor sentimen bersih entitas (Tier 2). Netral / tanpa data → abu.
+function sentColor(score: number | null | undefined): string {
+  if (score == null) return "var(--muted)";
+  if (score > 0.1) return "var(--ok)";
+  if (score < -0.1) return "var(--crit)";
+  return "var(--muted)";
+}
+
 function layout(nodes: GraphNode[], edges: GraphEdge[]): Record<string, { x: number; y: number }> {
   const N = nodes.length || 1;
   const p: Record<string, { x: number; y: number; vx: number; vy: number }> = {};
@@ -62,7 +70,7 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
   const [note, setNote] = useState("");
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("all");
-  const [colorMode, setColorMode] = useState<"type" | "community">("type");
+  const [colorMode, setColorMode] = useState<"type" | "community" | "sentiment">("type");
   const [sel, setSel] = useState<string | null>(null);
   const [selComm, setSelComm] = useState<number | null>(null);
   const [src, setSrc] = useState<Comment[]>([]);
@@ -150,7 +158,10 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
       .map(([cid, ns]) => ({ cid, nodes: [...ns].sort((a, b) => b.mentions - a.mentions) }))
       .sort((a, b) => b.nodes.length - a.nodes.length).slice(0, 8);
   }, [data]);
-  const nodeColor = (n: GraphNode) => (colorMode === "community" ? (commColorMap[n.community] ?? "var(--muted)") : color(n.type));
+  const nodeColor = (n: GraphNode) =>
+    colorMode === "community" ? (commColorMap[n.community] ?? "var(--muted)")
+      : colorMode === "sentiment" ? sentColor(n.sent_score)
+        : color(n.type);
   const emph = useMemo(() => {
     const s = new Set<string>();
     if (!data) return s;
@@ -261,13 +272,13 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
               <option value="location">Lokasi</option>
             </select>
             <div style={{ display: "flex", gap: 6 }}>
-              {(["type", "community"] as const).map((m) => (
+              {(["type", "community", "sentiment"] as const).map((m) => (
                 <button key={m} onClick={() => { setColorMode(m); setSelComm(null); }} className="btn" style={{
-                  flex: 1, fontSize: 12, padding: "7px 8px",
+                  flex: 1, fontSize: 11.5, padding: "7px 6px",
                   borderColor: colorMode === m ? "var(--accent)" : "var(--line)",
                   background: colorMode === m ? "var(--accent-soft)" : "var(--surface)",
                   color: colorMode === m ? "var(--accent-ink)" : "var(--ink)",
-                }}>{m === "type" ? "Warna: Tipe" : "Komunitas"}</button>
+                }}>{m === "type" ? "Tipe" : m === "community" ? "Komunitas" : "Sentimen"}</button>
               ))}
             </div>
           </Card>
@@ -284,6 +295,13 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
                 <Pill tone="accent">{selNode.mentions} sebutan</Pill>
                 <Pill tone="info">{selDeg} koneksi</Pill>
               </div>
+              {selNode.sent_score != null && (
+                <div style={{ marginTop: 9, fontSize: 11.5, color: "var(--muted)" }}>
+                  Sentimen <b style={{ color: sentColor(selNode.sent_score) }}>{selNode.sent_score.toFixed(2)}</b>
+                  {selNode.emotion ? ` · emosi ${selNode.emotion}` : ""}
+                  <span style={{ color: "var(--faint)" }}>{"  "}({selNode.pos ?? 0}+ / {selNode.neu ?? 0} / {selNode.neg ?? 0}−)</span>
+                </div>
+              )}
               <div style={{ marginTop: 12, borderTop: "1px solid var(--line-2)", paddingTop: 10 }}>
                 <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, marginBottom: 8 }}>Komentar sumber</div>
                 {srcLoading ? <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Memuat…</div>
@@ -317,6 +335,18 @@ export function KnowledgeGraph({ headerSlot }: { headerSlot: (n: React.ReactNode
                     </button>
                   );
                 })}
+            </Card>
+          ) : colorMode === "sentiment" ? (
+            <Card style={{ padding: 14 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, marginBottom: 10 }}>Sentimen</div>
+              {([["Positif", "var(--ok)"], ["Netral / tanpa data", "var(--muted)"], ["Negatif", "var(--crit)"]] as const).map(([lbl, c]) => (
+                <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, padding: "3px 0" }}>
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: c }} /> {lbl}
+                </div>
+              ))}
+              <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 9, lineHeight: 1.5 }}>
+                Warna = skor sentimen bersih entitas, dari komentar yang menyebutnya. Perlu graph dibangun setelah analisis.
+              </div>
             </Card>
           ) : (
             <Card style={{ padding: 14 }}>

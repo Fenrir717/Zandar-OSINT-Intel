@@ -79,11 +79,23 @@ export function CommentExplorer({ headerSlot }: { headerSlot: (node: React.React
   );
 }
 
+// Label intensitas dari |sentiment_score| (Tier 1): Sangat/Agak/Sedikit + arah.
+function intensityLabel(c: Comment): { label: string; tone: "ok" | "crit" | "muted" | "violet" } | null {
+  if (c.sentiment === "neu") return { label: "Netral", tone: "muted" };
+  if (!c.sentiment || c.sentiment_score == null) return null;
+  const mag = Math.abs(c.sentiment_score);
+  const strength = mag >= 0.5 ? "Sangat" : mag >= 0.25 ? "Agak" : "Sedikit";
+  if (c.sentiment === "pos") return { label: `${strength} Positif`, tone: "ok" };
+  if (c.sentiment === "neg") return { label: `${strength} Negatif`, tone: "crit" };
+  return { label: "Campuran", tone: "violet" };
+}
+
 function CommentCard({ c }: { c: Comment }) {
   const when = c.published_at ? new Date(c.published_at).toLocaleDateString("id") : "";
+  const it = intensityLabel(c);
   return (
     <Card hover style={{ padding: "13px 15px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap" }}>
         <span style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--surface-2)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
           {(c.author_hash || "?").slice(0, 2)}
         </span>
@@ -92,6 +104,8 @@ function CommentCard({ c }: { c: Comment }) {
           <span style={{ opacity: .7 }}>(pseudonim)</span><br />{c.platform} · {when}
         </div>
         <div style={{ flex: 1 }} />
+        {it && <Pill tone={it.tone} dot>{it.label}</Pill>}
+        {c.is_sarcasm && <Pill tone="warn">sarkasme</Pill>}
         {c.lang && <Pill tone={c.lang === "id" ? "accent" : "muted"}>{c.lang}</Pill>}
       </div>
       <div style={{ fontSize: 13, lineHeight: 1.5 }}>{c.content}</div>

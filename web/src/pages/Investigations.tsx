@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Investigation } from "../lib/api";
-import { Button, Card, Empty, Pill, ProgressBar } from "../components/ui";
+import { api, ApiError, type Investigation } from "../lib/api";
+import { Button, Card, Empty, Field, Modal, Pill, ProgressBar } from "../components/ui";
 import { Icon } from "../components/icons";
 
 type Tone = "accent" | "ok" | "warn" | "crit" | "muted" | "info" | "violet";
@@ -24,6 +24,7 @@ export function Investigations({ headerSlot }: { headerSlot: (n: React.ReactNode
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => { headerSlot(null); }, []);
 
@@ -54,10 +55,15 @@ export function Investigations({ headerSlot }: { headerSlot: (n: React.ReactNode
           <option value="">Semua status</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
-        <span title="Segera" style={{ display: "inline-flex" }}>
-          <Button icon="plus" disabled>Investigasi Baru</Button>
-        </span>
+        <Button icon="plus" onClick={() => setShowNew(true)}>Investigasi Baru</Button>
       </div>
+
+      {showNew && (
+        <NewInvestigationModal
+          onClose={() => setShowNew(false)}
+          onCreated={(inv) => { setList((prev) => [inv, ...prev]); setShowNew(false); }}
+        />
+      )}
 
       {loading ? (
         <Empty icon="search">Memuat investigasi…</Empty>
@@ -71,6 +77,87 @@ export function Investigations({ headerSlot }: { headerSlot: (n: React.ReactNode
         </div>
       )}
     </div>
+  );
+}
+
+function NewInvestigationModal({ onClose, onCreated }: {
+  onClose: () => void; onCreated: (inv: Investigation) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dataPolicy, setDataPolicy] = useState("local_only");
+  const [budget, setBudget] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const valid = title.trim().length >= 3;
+
+  async function submit() {
+    if (!valid || busy) return;
+    setBusy(true); setErr("");
+    try {
+      const inv = await api.createInvestigation({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        priority,
+        data_policy: dataPolicy,
+        budget_cap_usd: budget.trim() ? Number(budget) : undefined,
+      });
+      onCreated(inv);
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 422 ? "Periksa isian (judul minimal 3 karakter)." : "Gagal membuat investigasi.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Investigasi Baru"
+      onClose={onClose}
+      busy={busy}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Batal</Button>
+          <Button icon="plus" onClick={submit} disabled={!valid || busy}>
+            {busy ? "Menyimpan…" : "Buat"}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Judul">
+        <input className="input" value={title} autoFocus maxLength={255}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) submit(); }}
+          placeholder="mis. Narasi subsidi BBM 2026" />
+      </Field>
+      <Field label="Deskripsi" hint="Opsional — konteks singkat, target, atau hipotesis.">
+        <textarea className="input" value={description} rows={3}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ringkas fokus investigasi…" style={{ resize: "vertical" }} />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Prioritas">
+          <select className="select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+            {(["low", "medium", "high", "critical"] as const).map((p) => (
+              <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Kebijakan data">
+          <select className="select" value={dataPolicy} onChange={(e) => setDataPolicy(e.target.value)}>
+            <option value="local_only">Data lokal saja</option>
+            <option value="api_ok">API diizinkan</option>
+          </select>
+        </Field>
+      </div>
+      <Field label="Batas anggaran (USD)" hint="Opsional — kosongkan bila tanpa batas.">
+        <input className="input" value={budget} inputMode="decimal"
+          onChange={(e) => setBudget(e.target.value.replace(/[^0-9.]/g, ""))}
+          placeholder="mis. 5" />
+      </Field>
+      {err && <div style={{ fontSize: 12, color: "var(--crit)" }}>{err}</div>}
+    </Modal>
   );
 }
 

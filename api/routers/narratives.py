@@ -51,7 +51,8 @@ async def build_narratives(
 
     from workers.tasks import build_narratives as task
 
-    t = task.delay(str(investigation_id), body.threshold, body.min_size)
+    from api.util import enqueue
+    t = enqueue(task, str(investigation_id), body.threshold, body.min_size)
     return BuildAccepted(task_id=t.id, status="queued")
 
 
