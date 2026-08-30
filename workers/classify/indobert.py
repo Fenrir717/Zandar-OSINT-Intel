@@ -1,66 +1,101 @@
-"""Provider IndoBERT (Tier L, jalur produksi). Impor torch/transformers LAZY —
-modul ini tidak dimuat kecuali CLASSIFIER_PROVIDER=indobert, sehingga backend tetap
-hidup tanpa dependensi berat.
+"""Provider IndoBERT MULTI-MODEL (Tier L, jalur produksi). Impor torch/transformers
+LAZY — modul ini tidak dimuat kecuali CLASSIFIER_PROVIDER=indobert.
 
-HIBRIDA: RoBERTa fine-tuned Indonesia untuk SENTIMEN (dimensi terpenting, terbukti
-menangkap nuansa yang leksikon lewatkan), + leksikon untuk emosi/intent/toksisitas
-(head khusus model menyusul). Jadi mengganti lexicon→indobert adalah upgrade murni.
+Tiga model RoBERTa Indonesia (keluarga w11wo + CNERG) + leksikon untuk intent:
+- Sentimen : w11wo/indonesian-roberta-base-sentiment-classifier
+- Emosi    : w11wo/indonesian-roberta-base-prdect-id (5 emosi)
+- Toksisitas: Hate-speech-CNERG/dehatebert-mono-indonesian (skor hate)
+- Intent   : leksikon (tak ada taksonomi OSINT siap-pakai)
 
-Muat di GPU bila ada (fp16, cocok RTX 3050 4GB untuk inferensi), fallback CPU.
-Model dipilih via env; unduh sekali dari HuggingFace lalu di-cache lokal.
+Tiap sub-model dimuat try/except; bila gagal (jaringan/OOM) → fallback leksikon
+untuk dimensi itu. Muat di GPU bila ada (fp16, RTX 3050), fallback CPU.
 """
 
 from workers.classify.base import Classifier, Label
 from workers.classify.lexicon import LexiconClassifier
 
-# Peta label model sentimen Indonesia populer → skema internal
 _SENT_MAP = {
     "positive": ("pos", 0.7), "negative": ("neg", -0.7), "neutral": ("neu", 0.0),
     "LABEL_0": ("neg", -0.7), "LABEL_1": ("neu", 0.0), "LABEL_2": ("pos", 0.7),
 }
+# PRDECT-ID → taksonomi internal EMOTIONS
+_EMO_MAP = {
+    "anger": "anger", "fear": "fear", "happy": "joy", "love": "trust", "sadness": "sadness",
+    "joy": "joy", "sad": "sadness", "trust": "trust", "surprise": "surprise", "disgust": "disgust",
+}
 
 
 class IndoBertClassifier(Classifier):
-    version = "indobert-v1"
+    version = "indobert-multi"
 
     def __init__(self) -> None:
         try:
             import torch
             from transformers import pipeline
-        except ImportError as exc:  # pragma: no cover - hanya bila ml extra belum dipasang
+        except ImportError as exc:  # pragma: no cover
             raise RuntimeError(
-                "Provider indobert butuh torch+transformers. Pasang: pip install -e \".[ml]\" "
-                "lalu set CLASSIFIER_PROVIDER=indobert."
+                'Provider indobert butuh torch+transformers. Pasang: pip install -e ".[ml]"'
             ) from exc
 
         from core.config import get_settings
 
-        model = get_settings().indobert_sentiment_model
+        s = get_settings()
         device = 0 if torch.cuda.is_available() else -1
-        self._device = "cuda" if device == 0 else "cpu"
+        self._dev = "cuda" if device == 0 else "cpu"
         dtype = torch.float16 if device == 0 else torch.float32
-        self._pipe = pipeline(
-            "text-classification", model=model, device=device, dtype=dtype, truncation=True,
-        )
-        self._lex = LexiconClassifier()  # untuk emosi/intent/toksisitas
-        self.version = f"indobert-sent+lex[{self._device}]"  # <=50 char (kolom model_version)
+
+        def _load(model_id: str, **kw):
+            # Coba cache dulu (local_files_only=True) agar tak hang cek-update ke HF
+            # saat jaringan flaky; baru online bila model belum ter-cache.
+            for local_only in (True, False):
+                try:
+                    return pipeline("text-classification", model=model_id, device=device,
+                                    dtype=dtype, truncation=True, local_files_only=local_only, **kw)
+                except Exception:
+                    continue
+            return None  # gagal offline & online → dimensi ini fallback leksikon
+
+        self._sent = _load(s.indobert_sentiment_model)
+        self._emo = _load(s.indobert_emotion_model)
+        self._tox = _load(s.indobert_hatespeech_model, top_k=None)  # semua skor
+        self._lex = LexiconClassifier()
+
+        active = [n for n, m in (("sent", self._sent), ("emo", self._emo), ("tox", self._tox)) if m]
+        self.version = f"indobert-multi[{'+'.join(active) or 'none'}/{self._dev}]"[:50]
 
     def classify(self, texts: list[str]) -> list[Label]:
         texts = list(texts)
-        raw = self._pipe(texts, batch_size=32)  # pipeline batching internal
-        lex = self._lex.classify(texts)  # emosi/intent/toksisitas dari leksikon
+        lex = self._lex.classify(texts)
+        sent = self._sent(texts, batch_size=32) if self._sent else None
+        emo = self._emo(texts, batch_size=32) if self._emo else None
+        tox = self._tox(texts, batch_size=32) if self._tox else None
+
         out: list[Label] = []
-        for r, lx in zip(raw, lex, strict=True):
-            sentiment, score = _SENT_MAP.get(r["label"], ("neu", 0.0))
-            conf = float(r.get("score", 0.5))
-            out.append(
-                Label(
-                    sentiment=sentiment,
-                    sentiment_score=round(score * conf, 3),
-                    emotion=lx.emotion,
-                    intent=lx.intent,
-                    toxicity=lx.toxicity,
-                    model_version=self.version,
-                )
-            )
+        for i, lx in enumerate(lex):
+            if sent:
+                s_lbl, s_score = _SENT_MAP.get(sent[i]["label"], ("neu", 0.0))
+                sentiment = s_lbl
+                sentiment_score = round(s_score * float(sent[i].get("score", 0.5)), 3)
+            else:
+                sentiment, sentiment_score = lx.sentiment, lx.sentiment_score
+
+            emotion = _EMO_MAP.get(emo[i]["label"].lower(), "neutral") if emo else lx.emotion
+            toxicity = _hate_score(tox[i]) if tox else lx.toxicity
+
+            out.append(Label(
+                sentiment=sentiment, sentiment_score=sentiment_score,
+                emotion=emotion, intent=lx.intent, toxicity=toxicity,
+                model_version=self.version,
+            ))
         return out
+
+
+def _hate_score(scores) -> float:
+    """dehatebert: cari probabilitas label 'hate' (atau LABEL_1) dari daftar skor."""
+    if isinstance(scores, dict):
+        scores = [scores]
+    for s in scores:
+        lbl = str(s.get("label", "")).lower()
+        if ("hate" in lbl and "non" not in lbl) or lbl in ("label_1", "abusive", "toxic"):
+            return round(float(s.get("score", 0.0)), 3)
+    return 0.0
