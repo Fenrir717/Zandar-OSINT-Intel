@@ -29,6 +29,9 @@ def make(provider: str):
     if provider == "indobert":
         from workers.classify.indobert import IndoBertClassifier
         return IndoBertClassifier()
+    if provider == "flash":
+        from workers.classify.flash import FlashClassifier
+        return FlashClassifier()
     raise SystemExit(f"provider tak dikenal: {provider}")
 
 

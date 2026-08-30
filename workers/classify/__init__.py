@@ -18,7 +18,13 @@ def _load_indobert() -> type[Classifier]:
     return IndoBertClassifier
 
 
-_LAZY = {"indobert": _load_indobert}
+def _load_flash() -> type[Classifier]:
+    from workers.classify.flash import FlashClassifier  # impor lazy (butuh LLM_PROVIDER)
+
+    return FlashClassifier
+
+
+_LAZY = {"indobert": _load_indobert, "flash": _load_flash}
 _instance: Classifier | None = None
 
 
