@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from core.config import get_settings
 
@@ -25,7 +25,14 @@ _MAX_TOKENS = 2048  # node graph hanya butuh JSON pendek; batasi output (hemat +
 
 
 class _ModelFailed(Exception):
-    """Satu model dalam rantai gagal (429/HTTP/jaringan) → coba model berikutnya."""
+    """Satu endpoint dalam rantai gagal (429/HTTP/jaringan) → coba yang berikutnya."""
+
+
+class _Endpoint(NamedTuple):
+    base_url: str
+    key: str
+    model: str
+    label: str  # "preset:model" untuk pesan error
 
 
 def _parse_models(spec: str) -> list[str]:
@@ -144,76 +151,92 @@ PRESETS: dict[str, tuple[str, str, str, str]] = {
         "https://api.cerebras.ai/v1", "cerebras_api_key",
         "llama-3.3-70b", "llama3.1-8b",
     ),
-    # Default GRATIS + fallback (diverifikasi patuh JSON & Bahasa Indonesia, 2026):
-    #   R (penalaran): Nemotron Ultra (cepat/kuat) → MiniMax M3
-    #   F (label)    : MiniMax M3 (nuansa terbaik) → Nemotron Ultra (tercepat)
+    # Default GRATIS + fallback berlapis (diverifikasi patuh JSON & Bahasa Indonesia,
+    # 2026). Fallback terakhir LINTAS-PROVIDER ke Groq (dilewati bila GROQ_API_KEY kosong):
+    #   R (penalaran): Nemotron Ultra (cepat/kuat) → MiniMax M3 → Groq gpt-oss-120b
+    #   F (label)    : MiniMax M3 (nuansa terbaik) → Nemotron Ultra → Groq gpt-oss-20b
     "openrouter": (
         "https://openrouter.ai/api/v1", "openrouter_api_key",
-        "nvidia/nemotron-3-ultra-550b-a55b:free,minimax/minimax-m3:free",
-        "minimax/minimax-m3:free,nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free,minimax/minimax-m3:free,groq:openai/gpt-oss-120b",
+        "minimax/minimax-m3:free,nvidia/nemotron-3-ultra-550b-a55b:free,groq:openai/gpt-oss-20b",
     ),
 }
 
 
+def _resolve_chain(spec: str, primary_preset: str, s) -> list[_Endpoint]:
+    """Ubah "modelA,groq:modelB" → daftar endpoint. Entri boleh diawali "<preset>:"
+    untuk fallback LINTAS-PROVIDER (mis. groq:openai/gpt-oss-20b memakai endpoint+key
+    Groq). Tanpa awalan → provider primer. Endpoint tanpa key dilewati diam-diam."""
+    chain: list[_Endpoint] = []
+    for entry in _parse_models(spec):
+        preset, model = primary_preset, entry
+        head, sep, tail = entry.partition(":")
+        if sep and head in PRESETS:  # awalan preset dikenal → provider lintas
+            preset, model = head, tail
+        base_url, env_key, _, _ = PRESETS[preset]
+        key = getattr(s, env_key, "")
+        if key:
+            chain.append(_Endpoint(base_url, key, model, f"{preset}:{model}"))
+    return chain
+
+
 class OpenAICompatProvider(LLMProvider):
-    """Satu provider untuk semua backend OpenAI-compatible (Groq/Gemini/Cerebras/
-    OpenRouter). Dipilih via LLM_PROVIDER; kunci dari env sesuai preset. temperature 0
-    + JSON mode. Melaporkan token untuk agent_runs + budget cap."""
+    """Provider untuk semua backend OpenAI-compatible (Groq/Gemini/Cerebras/OpenRouter).
+    Dipilih via LLM_PROVIDER. Tiap tier punya RANTAI endpoint (bisa lintas-provider):
+    model berikutnya dicoba bila yang ini 429/HTTP-error/jaringan. temperature 0 +
+    JSON mode. Melaporkan token untuk agent_runs + budget cap."""
 
     def __init__(self, preset: str) -> None:
-        base_url, env_key, default_r, default_f = PRESETS[preset]
+        _, env_key, default_r, default_f = PRESETS[preset]
         self.preset = preset
-        self.base_url = base_url
         s = get_settings()
-        self.key = getattr(s, env_key, "")
-        if not self.key:
+        self.chain_r = _resolve_chain(s.llm_model_r or default_r, preset, s)
+        self.chain_f = _resolve_chain(s.llm_model_f or default_f, preset, s)
+        if not self.chain_r or not self.chain_f:
             raise RuntimeError(
-                f"LLM_PROVIDER={preset} tapi {env_key.upper()} kosong. Daftar di provider, "
-                f"lalu isi {env_key.upper()} di .env."
+                f"LLM_PROVIDER={preset} tapi tak ada endpoint berkunci. Isi {env_key.upper()} di .env."
             )
-        self.models_r = _parse_models(s.llm_model_r or default_r)
-        self.models_f = _parse_models(s.llm_model_f or default_f)
 
     def call_json(self, tier: Tier, system: str, user: str, hint: dict | None = None) -> LLMResult:
         messages = [
             {"role": "system", "content": system + "\nBalas HANYA JSON valid, tanpa teks lain."},
             {"role": "user", "content": user},
         ]
-        models = self.models_r if tier == "R" else self.models_f
+        chain = self.chain_r if tier == "R" else self.chain_f
         errors: list[str] = []
-        for model in models:  # rantai fallback: model berikutnya bila yang ini gagal
+        for ep in chain:  # rantai fallback (bisa lintas-provider)
             try:
-                return self._call_one(model, messages)
+                return self._call_one(ep, messages)
             except _ModelFailed as e:
                 errors.append(str(e))
         raise RuntimeError("Semua model LLM gagal: " + " | ".join(errors))
 
-    def _call_one(self, model: str, messages: list[dict]) -> LLMResult:
+    def _call_one(self, ep: _Endpoint, messages: list[dict]) -> LLMResult:
         import time
 
         import httpx
 
         payload = {
-            "model": model, "temperature": 0, "max_tokens": _MAX_TOKENS,
+            "model": ep.model, "temperature": 0, "max_tokens": _MAX_TOKENS,
             "response_format": {"type": "json_object"}, "messages": messages,
         }
         delay = 1.5
-        for attempt in range(3):  # retry singkat pada 429/transient, lalu menyerah → model berikutnya
+        for attempt in range(3):  # retry singkat pada 429/transient, lalu menyerah → endpoint berikutnya
             try:
                 resp = httpx.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self.key}"}, json=payload, timeout=60,
+                    f"{ep.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {ep.key}"}, json=payload, timeout=60,
                 )
             except httpx.HTTPError as e:
-                raise _ModelFailed(f"{model}: {type(e).__name__}") from e
+                raise _ModelFailed(f"{ep.label}: {type(e).__name__}") from e
             if resp.status_code in (429, 500, 502, 503):
                 if attempt < 2:
                     time.sleep(delay)
                     delay = min(delay * 2, 10)
                     continue
-                raise _ModelFailed(f"{model}: {resp.status_code} (rate-limit)")
-            if resp.status_code >= 400:  # slug salah / kredit habis → coba model lain
-                raise _ModelFailed(f"{model}: {resp.status_code} {resp.text[:80]}")
+                raise _ModelFailed(f"{ep.label}: {resp.status_code} (rate-limit)")
+            if resp.status_code >= 400:  # slug salah / kredit habis → coba endpoint lain
+                raise _ModelFailed(f"{ep.label}: {resp.status_code} {resp.text[:80]}")
             body = resp.json()
             content = body["choices"][0]["message"]["content"]
             usage = body.get("usage", {})
@@ -222,7 +245,7 @@ class OpenAICompatProvider(LLMProvider):
                 tokens_in=usage.get("prompt_tokens", 0),
                 tokens_out=usage.get("completion_tokens", 0),
             )
-        raise _ModelFailed(f"{model}: gagal")  # tak tercapai (defensif)
+        raise _ModelFailed(f"{ep.label}: gagal")  # tak tercapai (defensif)
 
 
 def _extract_json(text: str) -> dict:

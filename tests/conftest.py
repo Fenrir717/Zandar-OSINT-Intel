@@ -11,6 +11,8 @@ import pytest
 # Kredensial/provider yang di-netralkan agar test tak bergantung .env
 _NEUTRAL = {
     "LLM_PROVIDER": "stub",
+    "LLM_MODEL_R": "",  # override .env → test pakai default preset
+    "LLM_MODEL_F": "",
     "CLASSIFIER_PROVIDER": "lexicon",
     "GROQ_API_KEY": "",
     "GEMINI_API_KEY": "",

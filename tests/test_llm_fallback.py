@@ -44,6 +44,29 @@ def test_parse_models() -> None:
     assert L._parse_models("solo") == ["solo"]
 
 
+def test_resolve_chain_cross_provider(monkeypatch) -> None:
+    """"groq:model" → endpoint Groq; ":free" pada slug tak disalahartikan jadi preset."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    monkeypatch.setenv("GROQ_API_KEY", "gq-key")
+    get_settings.cache_clear()
+    s = get_settings()
+    chain = L._resolve_chain("minimax/minimax-m3:free,groq:openai/gpt-oss-20b", "openrouter", s)
+    assert [e.model for e in chain] == ["minimax/minimax-m3:free", "openai/gpt-oss-20b"]
+    assert "openrouter.ai" in chain[0].base_url
+    assert "groq.com" in chain[1].base_url
+    get_settings.cache_clear()
+
+
+def test_resolve_chain_skips_keyless(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    monkeypatch.setenv("GROQ_API_KEY", "")  # Groq tak berkunci → endpoint dilewati
+    get_settings.cache_clear()
+    s = get_settings()
+    chain = L._resolve_chain("minimax/minimax-m3:free,groq:openai/gpt-oss-20b", "openrouter", s)
+    assert [e.label for e in chain] == ["openrouter:minimax/minimax-m3:free"]
+    get_settings.cache_clear()
+
+
 def test_fallback_on_bad_model(monkeypatch, _openrouter) -> None:
     """400 (slug salah) di model pertama → langsung coba model kedua (tanpa retry)."""
     monkeypatch.setenv("LLM_MODEL_F", "bad-slug,good-model")
