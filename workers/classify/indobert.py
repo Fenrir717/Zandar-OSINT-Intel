@@ -65,10 +65,15 @@ class IndoBertClassifier(Classifier):
 
     def classify(self, texts: list[str]) -> list[Label]:
         texts = list(texts)
-        lex = self._lex.classify(texts)
-        sent = self._sent(texts, batch_size=32) if self._sent else None
-        emo = self._emo(texts, batch_size=32) if self._emo else None
-        tox = self._tox(texts, batch_size=32) if self._tox else None
+        lex = self._lex.classify(texts)  # leksikon pakai teks penuh
+        # RoBERTa batas 512 token: artikel panjang (website/news full-text) harus
+        # dipotong agar tak overflow position embeddings (index 514 out of bounds).
+        # ~1500 char aman di bawah 512 token utk teks Indonesia; sentimen umumnya
+        # sudah terwakili di bagian awal.
+        tx = [t[:1500] for t in texts]
+        sent = self._sent(tx, batch_size=32, truncation=True, max_length=512) if self._sent else None
+        emo = self._emo(tx, batch_size=32, truncation=True, max_length=512) if self._emo else None
+        tox = self._tox(tx, batch_size=32, truncation=True, max_length=512) if self._tox else None
 
         out: list[Label] = []
         for i, lx in enumerate(lex):
