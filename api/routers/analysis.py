@@ -1,8 +1,9 @@
+import re
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, func, or_, select
 
 from api.deps import CurrentUser, DbSession
 from core.models import Analysis, AuditLog, Comment, Investigation, Narrative
@@ -152,10 +153,43 @@ _CHAT_SYSTEM = (
     "Anda asisten intelijen untuk platform analisis sentimen & forensik narasi. "
     "Jawab pertanyaan analis HANYA berdasarkan DATA investigasi yang diberikan. "
     "WAJIB Bahasa Indonesia, ringkas, dan ACTIONABLE — beri wawasan/rekomendasi bila "
-    "relevan. Rujuk entitas/narasi/angka SPESIFIK dari data. Bila data tak cukup untuk "
-    "menjawab, katakan terus terang — JANGAN mengarang angka atau fakta. "
+    "relevan. Rujuk entitas/narasi/angka SPESIFIK dari data, dan kutip KOMENTAR "
+    "relevan bila tersedia. Bila data tak cukup untuk menjawab, katakan terus "
+    "terang — JANGAN mengarang angka, fakta, atau kutipan. "
     "Balas HANYA JSON {\"answer\": \"...\"}."
 )
+
+
+_CHAT_STOP = {
+    "yang", "dan", "dari", "untuk", "pada", "dengan", "ini", "itu", "atau", "juga",
+    "akan", "adalah", "apa", "kenapa", "mengapa", "bagaimana", "siapa", "mana",
+    "apakah", "tentang", "dalam", "tidak", "ada", "saja", "bisa", "paling", "kah",
+    "beri", "berikan", "jelaskan", "sebutkan", "ringkas", "publik", "topik",
+}
+
+
+def _chat_keywords(q: str) -> list[str]:
+    seen: list[str] = []
+    for w in re.findall(r"[A-Za-z]{4,}", q.lower()):
+        if w not in _CHAT_STOP and w not in seen:
+            seen.append(w)
+    return seen[:6]
+
+
+async def _retrieve_comments(session: DbSession, inv: uuid.UUID, question: str) -> list[dict]:
+    """Ambil KOMENTAR nyata yang cocok kata-kunci pertanyaan (grounding kutipan)."""
+    kws = _chat_keywords(question)
+    if not kws:
+        return []
+    rows = (await session.execute(
+        select(Comment.content, Comment.platform, Comment.url, Analysis.sentiment)
+        .outerjoin(Analysis, Analysis.comment_id == Comment.id)
+        .where(Comment.investigation_id == inv,
+               or_(*[Comment.content.ilike(f"%{k}%") for k in kws]))
+        .order_by(Comment.published_at.desc().nullslast())
+        .limit(6)
+    )).all()
+    return [{"content": r[0], "platform": r[1], "url": r[2], "sentiment": r[3]} for r in rows]
 
 
 async def _chat_context(session: DbSession, inv: uuid.UUID, title: str) -> str:
@@ -222,6 +256,13 @@ async def chat(
     if inv is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Investigasi tidak ditemukan")
     context = await _chat_context(session, investigation_id, inv.title)
+
+    # Grounding: kutipan komentar nyata yang relevan dengan pertanyaan.
+    comments = await _retrieve_comments(session, investigation_id, body.question)
+    if comments:
+        context += "\n\nKOMENTAR RELEVAN (kutipan nyata):\n" + "\n".join(
+            f"- ({c['sentiment'] or '?'}, {c['platform']}) {(c['content'] or '')[:200]}"
+            for c in comments)
 
     import asyncio
 
