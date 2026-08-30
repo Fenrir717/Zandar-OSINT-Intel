@@ -34,15 +34,14 @@ export function CommentExplorer({ headerSlot }: { headerSlot: (node: React.React
 
   const platforms = stats ? Object.keys(stats.by_platform) : [];
   const langs = stats ? Object.keys(stats.by_lang) : [];
-  const select = { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 6, background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontFamily: "inherit" };
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
-        <Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} />
-        <Tile label="Platform" value={platforms.length || "–"} />
-        <Tile label="Bahasa terdeteksi" value={langs.length || "–"} />
-        <Tile label="Hasil terfilter" value={loading ? "…" : comments.length} />
+      <div className="grid-stats" style={{ marginBottom: 16 }}>
+        <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>
+        <div className="rise rise-2"><Tile label="Platform" value={platforms.length || "–"} icon="collections" /></div>
+        <div className="rise rise-3"><Tile label="Bahasa terdeteksi" value={langs.length || "–"} icon="analysis" /></div>
+        <div className="rise rise-4"><Tile label="Hasil terfilter" value={loading ? "…" : comments.length} icon="filter" /></div>
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
@@ -60,16 +59,16 @@ export function CommentExplorer({ headerSlot }: { headerSlot: (node: React.React
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && loadComments()}
-              placeholder="Cari isi komentar…" style={{ ...select, flex: 1, minWidth: 200 }} />
-            <select value={platform} onChange={(e) => { setPlatform(e.target.value); }} style={select}>
+              placeholder="Cari isi komentar…" className="input" style={{ flex: 1, minWidth: 200 }} />
+            <select value={platform} onChange={(e) => { setPlatform(e.target.value); }} className="select" style={{ width: "auto" }}>
               <option value="">Semua platform</option>
               {platforms.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <select value={lang} onChange={(e) => setLang(e.target.value)} style={select}>
+            <select value={lang} onChange={(e) => setLang(e.target.value)} className="select" style={{ width: "auto" }}>
               <option value="">Semua bahasa</option>
               {langs.map((l) => <option key={l} value={l}>{l}</option>)}
             </select>
-            <button onClick={loadComments} style={{ background: "var(--accent)", color: "#fff", border: "1px solid var(--accent-ink)", borderRadius: 6, padding: "8px 16px", fontWeight: 600, fontSize: 13 }}>Cari</button>
+            <button onClick={loadComments} className="btn btn-primary">Cari</button>
           </div>
           {loading ? <Empty>Memuat…</Empty>
             : comments.length === 0 ? <Empty>Tidak ada komentar cocok. Jalankan koleksi dulu, atau longgarkan filter.</Empty>
@@ -83,7 +82,7 @@ export function CommentExplorer({ headerSlot }: { headerSlot: (node: React.React
 function CommentCard({ c }: { c: Comment }) {
   const when = c.published_at ? new Date(c.published_at).toLocaleDateString("id") : "";
   return (
-    <Card style={{ padding: "13px 15px" }}>
+    <Card hover style={{ padding: "13px 15px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 7 }}>
         <span style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--surface-2)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
           {(c.author_hash || "?").slice(0, 2)}
@@ -127,28 +126,26 @@ function RunsView({ inv }: { inv: string }) {
   if (rows.length === 0) return <Empty>Belum ada koleksi untuk investigasi ini.</Empty>;
 
   const stColor: Record<string, string> = { done: "var(--ok)", failed: "var(--crit)", running: "var(--warn)", queued: "var(--warn)" };
-  const th = { textAlign: "left" as const, fontSize: 10, textTransform: "uppercase" as const, letterSpacing: ".05em", color: "var(--muted)", padding: "9px 12px", background: "var(--surface-2)", borderBottom: "1px solid var(--line)" };
-  const td = { padding: "9px 12px", borderBottom: "1px solid var(--line)", fontSize: 13 };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {rows.map((r, i) => (
-        <Card key={i} style={{ padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <Card key={i} style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", borderBottom: "1px solid var(--line)" }}>
             <b>Koleksi</b><Pill>{r.query}…</Pill><div style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>cron: {r.cron || "manual"}</span>
           </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr><th style={th}>Status</th><th style={th}>Item</th><th style={th}>Mulai</th><th style={th}>Selesai</th><th style={th}>Error</th></tr></thead>
+          <div className="scroll-x">
+            <table className="tbl">
+              <thead><tr><th>Status</th><th>Item</th><th>Mulai</th><th>Selesai</th><th>Error</th></tr></thead>
               <tbody>
-                {r.runs.length === 0 ? <tr><td style={{ ...td, color: "var(--muted)" }} colSpan={5}>belum ada run</td></tr>
+                {r.runs.length === 0 ? <tr><td style={{ color: "var(--muted)" }} colSpan={5}>belum ada run</td></tr>
                   : r.runs.map((run) => (
                     <tr key={run.id}>
-                      <td style={{ ...td, color: stColor[run.status] || "var(--ink)", fontWeight: 600 }}>{run.status}</td>
-                      <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{run.items_collected}</td>
-                      <td style={td}>{fmt(run.started_at)}</td><td style={td}>{fmt(run.finished_at)}</td>
-                      <td style={{ ...td, color: "var(--crit)" }}>{run.error || ""}</td>
+                      <td style={{ color: stColor[run.status] || "var(--ink)", fontWeight: 600 }}>{run.status}</td>
+                      <td className="tnum">{run.items_collected}</td>
+                      <td style={{ color: "var(--muted)" }}>{fmt(run.started_at)}</td><td style={{ color: "var(--muted)" }}>{fmt(run.finished_at)}</td>
+                      <td style={{ color: "var(--crit)" }}>{run.error || ""}</td>
                     </tr>
                   ))}
               </tbody>

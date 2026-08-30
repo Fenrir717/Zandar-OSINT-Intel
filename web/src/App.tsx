@@ -11,7 +11,7 @@ const TITLES: Record<string, string> = {
   "/": "Dashboard", "/investigations": "Investigations", "/collections": "Collections",
   "/explorer": "Comment Explorer", "/analysis": "AI Analysis", "/graph": "Knowledge Graph",
   "/forensics": "Forensik Narasi", "/veracity": "Verifikasi Klaim", "/reports": "Reports",
-  "/agents": "Agent Monitor",
+  "/agents": "Agent Monitor", "/settings": "Settings",
 };
 
 export default function App() {
@@ -48,6 +48,7 @@ export default function App() {
         <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />
         <Route path="/reports" element={<Placeholder title="Reports" phase="Fase 4" desc="Laporan intelijen ber-sitasi (Graph D), ekspor PDF, label klasifikasi." />} />
         <Route path="/agents" element={<AgentMonitor headerSlot={setHeaderRight} />} />
+        <Route path="/settings" element={<Placeholder title="Settings" phase="—" desc="Konfigurasi platform: provider LLM & embedding, kredensial sumber, kebijakan data (UU PDP), tema. Sebagian dikelola via .env; UI menyusul." />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Routes>
     </Shell>
