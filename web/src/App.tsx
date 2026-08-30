@@ -13,7 +13,9 @@ import { Collections } from "./pages/Collections";
 import { Timeline } from "./pages/Timeline";
 import { KnowledgeGraph } from "./pages/KnowledgeGraph";
 import { Reports } from "./pages/Reports";
-import { Placeholder } from "./pages/Placeholder";
+import { ForensikNarasi } from "./pages/ForensikNarasi";
+import { VerifikasiKlaim } from "./pages/VerifikasiKlaim";
+import { Settings } from "./pages/Settings";
 
 const TITLES: Record<string, string> = {
   "/": "Dashboard", "/projects": "Projects", "/investigations": "Investigations",
@@ -57,9 +59,9 @@ export default function App() {
           <Route path="/timeline" element={<Timeline headerSlot={setHeaderRight} />} />
           <Route path="/reports" element={<Reports headerSlot={setHeaderRight} />} />
           <Route path="/agents" element={<AgentMonitor headerSlot={setHeaderRight} />} />
-          <Route path="/forensics" element={<Placeholder title="Forensik Narasi" phase="Fase 3" desc="Matriks kuadran Otentisitas × Kebenaran, skor ABC+D, peta TTP DISARM." />} />
-          <Route path="/veracity" element={<Placeholder title="Verifikasi Klaim" phase="Fase 5" desc="Verdict klaim (didukung/dibantah/tak cukup/bertentangan) ber-bukti & skor kredibilitas sumber." />} />
-          <Route path="/settings" element={<Placeholder title="Settings" phase="—" desc="Konfigurasi platform: provider LLM & embedding, kredensial sumber, kebijakan data (UU PDP), tema. Sebagian dikelola via .env; UI menyusul." />} />
+          <Route path="/forensics" element={<ForensikNarasi headerSlot={setHeaderRight} />} />
+          <Route path="/veracity" element={<VerifikasiKlaim headerSlot={setHeaderRight} />} />
+          <Route path="/settings" element={<Settings headerSlot={setHeaderRight} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     </Shell>

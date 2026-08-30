@@ -15,6 +15,7 @@ from api.routers import (
     planner,
     projects,
     sources,
+    system,
 )
 from core.config import get_settings
 
@@ -43,6 +44,7 @@ app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(planner.router, prefix="/api/v1")
 app.include_router(narratives.router, prefix="/api/v1")
 app.include_router(projects.router, prefix="/api/v1")
+app.include_router(system.router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["system"])

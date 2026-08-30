@@ -66,6 +66,12 @@ export interface AdapterInfo {
 export interface Project {
   id: string; name: string; created_at: string | null; investigation_count: number;
 }
+export interface SystemService {
+  name: string; kind: string; status: "connected" | "down" | "configured" | "not_configured"; detail: string;
+}
+export interface SystemUser {
+  id: string; name: string; email: string; role: string; created_at: string | null;
+}
 export interface AgentRun {
   id: string; graph_name: string; status: string; tokens_in: number;
   tokens_out: number; cost_usd: number; started_at: string | null; ended_at: string | null;
@@ -125,6 +131,8 @@ export const api = {
     }),
   narratives: (inv: string) => req<Narrative[]>(`/investigations/${inv}/narratives`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
+  systemStatus: () => req<SystemService[]>("/system/status"),
+  systemUsers: () => req<SystemUser[]>("/system/users"),
   runAnalysis: (inv: string) =>
     req<{ task_id: string; status: string }>(`/analysis/${inv}/run`, { method: "POST" }),
 };
