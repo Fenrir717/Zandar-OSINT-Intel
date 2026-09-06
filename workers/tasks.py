@@ -451,7 +451,10 @@ def dispatch_due_collections() -> dict:
 
 async def _dispatch_due() -> dict:
     now = datetime.now(UTC)
+    from collections import defaultdict
+
     dispatched: list[str] = []
+    by_inv: dict[str, list] = defaultdict(list)  # investigasi → daftar signature collect_source
     async with worker_session() as session:
         result = await session.execute(
             select(Collection).where(Collection.schedule_cron.is_not(None))
@@ -477,8 +480,15 @@ async def _dispatch_due() -> dict:
             session.add(run)
             col.last_run_at = now  # tandai tick cron ini tertangani (cegah re-dispatch)
             await session.flush()
-            collect_source.delay(str(col.id), str(run.id))
+            by_inv[str(col.investigation_id)].append(collect_source.s(str(col.id), str(run.id)))
             dispatched.append(str(col.id))
 
         await session.commit()
-    return {"checked": len(collections), "dispatched": dispatched}
+
+    # Per investigasi: chord koleksi → run_scan_pipeline (akumulasi NUMPUK via dedup lalu
+    # analisis di-refresh atas data yang membesar). Inilah "penjadwal nambah analysis".
+    from celery import chord
+
+    for inv_id, sigs in by_inv.items():
+        chord(sigs)(run_scan_pipeline.si(inv_id))
+    return {"checked": len(collections), "dispatched": dispatched, "investigations": len(by_inv)}

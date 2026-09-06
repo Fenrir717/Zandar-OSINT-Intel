@@ -188,6 +188,77 @@ async def keyword_suggestions(
     return suggest_keywords(comments, ents, seed, top=top)
 
 
+# ---------------------------------------------------------------- Rerun/numpuk + jadwal
+
+class ExpandScanBody(BaseModel):
+    keywords: list[str] = Field(min_length=1, max_length=20)
+    auto_pipeline: bool = True
+
+
+@router.post("/{investigation_id}/expand-scan", status_code=status.HTTP_202_ACCEPTED)
+async def expand_scan(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, body: ExpandScanBody
+) -> dict:
+    """Rerun/NUMPUK scan dengan keyword baru → koleksi menumpuk ke investigasi ini
+    (dedup platform+external_id), lalu analisis penuh jalan ulang atas data yang
+    membesar. Untuk perluas jangkauan pakai keyword hasil penemuan (grounded)."""
+    from graphs.runner import dispatch_keyword_scan
+
+    kws = [k.strip() for k in body.keywords if k and k.strip()][:12]
+    if not kws:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "keywords kosong")
+    dispatched = await dispatch_keyword_scan(session, investigation_id, kws, body.auto_pipeline)
+    session.add(AuditLog(user_id=user.id, action="analysis.expand_scan",
+                         resource=f"investigation:{investigation_id}"))
+    await session.commit()
+    return {"dispatched": len(dispatched), "keywords": kws, "auto_pipeline": body.auto_pipeline}
+
+
+_SCHEDULE_CRON = {"6h": "0 */6 * * *", "12h": "0 */12 * * *", "daily": "0 6 * * *"}
+_CRON_INTERVAL = {v: k for k, v in _SCHEDULE_CRON.items()}
+
+
+class ScheduleBody(BaseModel):
+    interval: str = Field(pattern="^(off|6h|12h|daily)$")
+
+
+@router.get("/{investigation_id}/schedule")
+async def get_schedule(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> dict:
+    """Status penjadwal auto-refresh investigasi ini."""
+    rows = (await session.execute(
+        select(Collection.schedule_cron).where(Collection.investigation_id == investigation_id)
+    )).all()
+    crons = {r[0] for r in rows if r[0]}
+    if not crons:
+        interval = "off"
+    elif len(crons) == 1:
+        interval = _CRON_INTERVAL.get(next(iter(crons)), "custom")
+    else:
+        interval = "mixed"
+    return {"interval": interval, "collections": len(rows)}
+
+
+@router.post("/{investigation_id}/schedule")
+async def set_schedule(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, body: ScheduleBody
+) -> dict:
+    """Penjadwal dikontrol analis (pencet sendiri): auto-refresh koleksi investigasi ini.
+    Beat otomatis re-collect + re-analisis tiap interval (numpuk lintas waktu). 'off'
+    mematikan. Butuh Celery beat berjalan."""
+    cron = _SCHEDULE_CRON.get(body.interval)  # None untuk 'off'
+    cols = (await session.execute(
+        select(Collection).where(Collection.investigation_id == investigation_id)
+    )).scalars().all()
+    for c in cols:
+        c.schedule_cron = cron
+    session.add(AuditLog(user_id=user.id, action="analysis.schedule",
+                         resource=f"investigation:{investigation_id}"))
+    await session.commit()
+    return {"interval": body.interval, "cron": cron, "collections": len(cols)}
+
+
 @router.get("/{investigation_id}/stats")
 async def analysis_stats(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser

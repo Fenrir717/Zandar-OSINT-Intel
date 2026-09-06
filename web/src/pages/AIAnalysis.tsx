@@ -59,26 +59,79 @@ function kwKindTone(kind: string): "violet" | "info" | "muted" {
   return kind === "hashtag" ? "violet" : kind === "entitas" ? "info" : "muted";
 }
 
-function KeywordSuggestCard({ kw }: { kw: KeywordSuggestionsResult }) {
+const SCHED_OPTS = [
+  { v: "off", label: "Mati" },
+  { v: "6h", label: "Tiap 6 jam" },
+  { v: "12h", label: "Tiap 12 jam" },
+  { v: "daily", label: "Harian" },
+];
+
+function KeywordSuggestCard({ kw, inv }: { kw: KeywordSuggestionsResult; inv: string }) {
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [interval, setIntervalState] = useState<string>("off");
+  const [schedBusy, setSchedBusy] = useState(false);
+
+  useEffect(() => { api.getSchedule(inv).then((r) => setIntervalState(r.interval)).catch(() => {}); }, [inv]);
+
+  function toggle(k: string) {
+    setSel((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  }
+  async function addScan() {
+    if (sel.size === 0 || busy) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.expandScan(inv, [...sel]);
+      setMsg(`✓ ${r.dispatched} koleksi didispatch — data menumpuk (dedup) & analisis refresh otomatis.`);
+      setSel(new Set());
+    } catch { setMsg("Gagal memulai scan."); }
+    finally { setBusy(false); }
+  }
+  async function changeSchedule(v: string) {
+    setSchedBusy(true);
+    try { await api.setSchedule(inv, v); setIntervalState(v); } catch { /* abaikan */ }
+    finally { setSchedBusy(false); }
+  }
+
   return (
     <Card style={{ padding: 18, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: 15 }}>Keyword dari Data Ini <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· AI · grounded</span></h3>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Perluas Investigasi <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· keyword AI · grounded</span></h3>
         <Pill tone="muted">{kw.suggestions.length} saran · {kw.total_comments.toLocaleString("id")} komentar</Pill>
       </div>
       <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 13 }}>
-        Ditambang dari hashtag/entitas/frasa yang publik <b>benar-benar</b> ucapkan (bukan sinonim karangan) — angle scan baru untuk perluas jangkauan.
+        Keyword ditambang dari data <b>nyata</b> (hashtag/entitas/frasa). Pilih → <b>Tambah scan</b> untuk numpuk data + refresh analisis. Atau jadwalkan auto-refresh.
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {kw.suggestions.map((s) => (
-          <span key={s.keyword} title={`${s.kind} · disebut ${s.count.toLocaleString("id")}x`}
-            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 9px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--surface-2)" }}>
-            <Pill tone={kwKindTone(s.kind)}>{s.kind}</Pill>
-            <b style={{ fontSize: 12.5 }}>{s.keyword}</b>
-            <span className="tnum" style={{ color: "var(--faint)", fontSize: 11 }}>{s.count.toLocaleString("id")}×</span>
-          </span>
-        ))}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+        {kw.suggestions.map((s) => {
+          const on = sel.has(s.keyword);
+          return (
+            <button key={s.keyword} onClick={() => toggle(s.keyword)} title={`${s.kind} · disebut ${s.count.toLocaleString("id")}x`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 9px", borderRadius: 8, cursor: "pointer",
+                border: on ? "1px solid var(--accent)" : "1px solid var(--line)",
+                background: on ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "var(--surface-2)" }}>
+              <Pill tone={kwKindTone(s.kind)}>{s.kind}</Pill>
+              <b style={{ fontSize: 12.5 }}>{s.keyword}</b>
+              <span className="tnum" style={{ color: "var(--faint)", fontSize: 11 }}>{s.count.toLocaleString("id")}×</span>
+            </button>
+          );
+        })}
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <Button onClick={addScan} disabled={sel.size === 0 || busy}>
+          {busy ? "Memulai…" : `Tambah scan (numpuk${sel.size ? " " + sel.size : ""})`}
+        </Button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)" }}>
+          Auto-refresh:
+          <select value={interval} disabled={schedBusy} onChange={(e) => changeSchedule(e.target.value)}
+            style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 12 }}>
+            {SCHED_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </label>
+        {interval !== "off" && interval !== "mixed" && <Pill tone="ok" dot>terjadwal</Pill>}
+      </div>
+      {msg && <div style={{ marginTop: 11, fontSize: 12, color: "var(--muted)" }}>{msg}</div>}
     </Card>
   );
 }
@@ -343,7 +396,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
 
       {buz && (buz.suspect_accounts > 0 || buz.coordinated_clusters > 0) && <BuzzerCard buz={buz} />}
 
-      {kw && kw.suggestions.length > 0 && <KeywordSuggestCard kw={kw} />}
+      {selected && kw && kw.suggestions.length > 0 && <KeywordSuggestCard kw={kw} inv={selected} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>

@@ -189,6 +189,27 @@ async def _dispatch_sources(
     return created
 
 
+async def dispatch_keyword_scan(
+    session: AsyncSession, investigation_id, keywords: list[str], auto_pipeline: bool = True,
+) -> list[str]:
+    """Rerun/numpuk scan: sumber keyword-capable + tulang punggung media → dispatch ke
+    investigasi yang SAMA. Komentar baru NUMPUK (dedup platform+external_id), lalu
+    (auto_pipeline) analisis penuh jalan ulang atas data yang membesar. Untuk fitur
+    'rerun 4x' dengan keyword baru hasil penemuan (grounded)."""
+    from graphs.media_seeds import sitemap_sources
+
+    kw = [str(k).strip() for k in (keywords or []) if k and str(k).strip()]
+    if not kw:
+        return []
+    sources: list[dict] = [
+        {"platform": p, "query": {"keywords": kw}}
+        for p in ("rss", "news", "reddit", "youtube", "telegram")
+    ]
+    sources += sitemap_sources(kw, limit=6)  # media ID (deterministik, tanpa jaringan di sini)
+    inv = investigation_id if isinstance(investigation_id, uuid.UUID) else uuid.UUID(str(investigation_id))
+    return await _dispatch_sources(session, inv, sources, auto_pipeline)
+
+
 # ---------------------------------------------------------------- Graph C (analysis)
 
 async def run_analysis(

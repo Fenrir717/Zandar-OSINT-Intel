@@ -329,6 +329,15 @@ export const api = {
   shareOfVoice: (inv: string, top = 10) => req<ShareOfVoiceResult>(`/analysis/${inv}/share-of-voice?top=${top}`),
   buzzer: (inv: string, top = 12) => req<BuzzerResult>(`/analysis/${inv}/buzzer?top=${top}`),
   keywordSuggestions: (inv: string, top = 15) => req<KeywordSuggestionsResult>(`/analysis/${inv}/keyword-suggestions?top=${top}`),
+  expandScan: (inv: string, keywords: string[], auto_pipeline = true) =>
+    req<{ dispatched: number; keywords: string[]; auto_pipeline: boolean }>(`/analysis/${inv}/expand-scan`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keywords, auto_pipeline }),
+    }),
+  getSchedule: (inv: string) => req<{ interval: string; collections: number }>(`/analysis/${inv}/schedule`),
+  setSchedule: (inv: string, interval: string) =>
+    req<{ interval: string; cron: string | null; collections: number }>(`/analysis/${inv}/schedule`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ interval }),
+    }),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {
