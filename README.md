@@ -161,7 +161,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `website` | free | 🔗 URL | web_extract (hormat robots.txt); **diisi otomatis oleh agen Recon** |
 | `blog` | free | 🔗 URL | autodiscovery feed → teks penuh |
 | `forum` | free | 🔗 URL | Discourse JSON; tanpa `base_url` → fail-soft (0, bukan error) |
-| `wayback` | free | ✅ | arsip Archive.org — konten dihapus, evolusi narasi |
+| `wayback` | free | 🔗 URL | arsip Archive.org — **bulk CDX** (paginasi resumeKey + sampling temporal lintas tahun); mode `extract` (teks artikel) / `index` (bukti keberadaan URL, murah, volume besar); konten dihapus & evolusi narasi |
 | `youtube_transcript` | free | 🔑 | closed caption publik (tanpa kuota Data API) |
 | `har` | free | ✅ | parse `.har` ekspor manual analis (human-in-the-loop) |
 | `github` | free | 🔑 | REST resmi (butuh token) |
