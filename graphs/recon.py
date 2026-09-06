@@ -110,10 +110,17 @@ def discover_targets(keywords: list[str], topic: str = "", max_urls: int = 20) -
         add(u)
 
     urls = urls[:max_urls]
-    if not urls:
-        return []
-    return [{
-        "platform": "website",
-        "query": {"urls": urls, "keywords": keywords, "max_pages": len(urls)},
-        "est_items": len(urls),
-    }]
+    specs: list[dict] = []
+    if urls:
+        specs.append({
+            "platform": "website",
+            "query": {"urls": urls, "keywords": keywords, "max_pages": len(urls)},
+            "est_items": len(urls),
+        })
+    # Tulang punggung deterministik: media besar Indonesia (umum+bisnis+investasi) via
+    # sitemap bulk. Selalu ikut bila ada keyword — tak bergantung DDG/LLM menemukannya.
+    if kws:
+        from graphs.media_seeds import sitemap_sources
+
+        specs.extend(sitemap_sources(keywords, limit=6))
+    return specs

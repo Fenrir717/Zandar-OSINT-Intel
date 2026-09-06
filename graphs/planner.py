@@ -27,7 +27,7 @@ from workers.adapters import ADAPTERS, describe_all
 #  keyword-OK  = produktif hanya dengan keywords (tanpa URL/target)
 #  butuh-URL   = perlu base_url/feeds/urls konkret → jangan dipilih untuk scan keyword-only
 _KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube", "playstore", "appstore"}
-_NEEDS_TARGET = {"blog", "website", "forum", "nitter", "satudata", "ckan"}
+_NEEDS_TARGET = {"blog", "website", "sitemap", "forum", "nitter", "satudata", "ckan"}
 
 
 def _source_catalog() -> str:
@@ -153,16 +153,21 @@ def _node_recon(state: PlannerState) -> dict:
         found = discover_targets(keywords, topic=topic)
     except Exception:
         found = []
-    if found:
-        spec = found[0]
-        existing = next((s for s in sources if s.get("platform") == "website"), None)
-        if existing:  # gabungkan bila LLM sudah memilih website
-            merged = list(dict.fromkeys(
-                list(existing.get("query", {}).get("urls", [])) + spec["query"]["urls"]))
-            existing.setdefault("query", {})["urls"] = merged
-            existing["est_items"] = len(merged)
-        else:
-            sources.append(spec)
+    for spec in found:
+        if spec["platform"] == "website":
+            existing = next((s for s in sources if s.get("platform") == "website"), None)
+            if existing:  # gabungkan bila LLM sudah memilih website
+                merged = list(dict.fromkeys(
+                    list(existing.get("query", {}).get("urls", [])) + spec["query"]["urls"]))
+                existing.setdefault("query", {})["urls"] = merged
+                existing["est_items"] = len(merged)
+            else:
+                sources.append(spec)
+        else:  # sitemap (media ID) dsb — tambah, dedup per (platform,url)
+            url = spec.get("query", {}).get("url")
+            if not any(s.get("platform") == spec["platform"]
+                       and s.get("query", {}).get("url") == url for s in sources):
+                sources.append(spec)
     return {"sources": sources}
 
 

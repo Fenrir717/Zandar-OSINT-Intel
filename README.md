@@ -113,7 +113,10 @@ flowchart TD
 - **Agen Recon** (`graphs/recon.py`): menemukan URL target otomatis (DuckDuckGo HTML
   gratis + situs benih dari LLM) → mengisi adapter `website`, sehingga sumber
   berbasis-URL ikut terkumpul **tanpa** analis mengetik URL. Tidak men-scrape Google
-  langsung (diblokir + langgar ToS).
+  langsung (diblokir + langgar ToS). Ditambah **tulang punggung deterministik**
+  (`graphs/media_seeds.py`): media besar Indonesia terverifikasi — **umum + bisnis +
+  investasi** (Kompas/Detik/CNBC/Katadata/Kontan/Bareksa) — otomatis dipasang via
+  adapter `sitemap`, jadi riset bisnis/brand tak bergantung keberuntungan pencarian.
 
 Terbukti end-to-end pada topik nyata "bisnis laundry": 5 sumber → ~1.040 item
 (youtube 922 via pencarian keyword, news 100, website 18 via Recon) → 13+ narasi.
