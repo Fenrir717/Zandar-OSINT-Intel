@@ -80,7 +80,7 @@ def _llm_seed_urls(topic: str, keywords: list[str]) -> list[str]:
     return out
 
 
-def discover_targets(keywords: list[str], topic: str = "", max_urls: int = 20) -> list[dict]:
+def discover_targets(keywords: list[str], topic: str = "", max_urls: int = 40) -> list[dict]:
     """Gabung DDG (beberapa query intent) + benih LLM → URL unik tersaring → satu
     source `website`. Kembalikan list spec sumber (kosong bila tak menemukan apa pun)."""
     kws = [k for k in keywords if k][:6]
@@ -122,5 +122,5 @@ def discover_targets(keywords: list[str], topic: str = "", max_urls: int = 20) -
     if kws:
         from graphs.media_seeds import sitemap_sources
 
-        specs.extend(sitemap_sources(keywords, limit=6))
+        specs.extend(sitemap_sources(keywords, limit=8))
     return specs

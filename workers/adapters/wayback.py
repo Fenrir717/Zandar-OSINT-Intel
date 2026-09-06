@@ -61,7 +61,7 @@ class WaybackAdapter(BaseAdapter):
         keywords = [k.lower() for k in query.get("keywords", [])]
         collapse = query.get("collapse", "digest")
         # cap output (dukung alias lama "limit")
-        max_snap = int(query.get("max_snapshots") or query.get("limit") or 50)
+        max_snap = int(query.get("max_snapshots") or query.get("limit") or 300)
         max_snap = max(1, min(max_snap, _MAX_SNAPSHOTS_CAP))
         # keluasan indeks CDX untuk sampling (default: jauh > output agar sampling bermakna)
         max_index = int(query.get("max_index") or min(max(max_snap * 20, 2000), _MAX_INDEX_CAP))

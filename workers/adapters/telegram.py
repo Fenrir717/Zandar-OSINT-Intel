@@ -96,7 +96,7 @@ class TelegramAdapter(BaseAdapter):
         from telethon.sessions import StringSession
 
         keywords = [k for k in query.get("keywords", []) if k]
-        per_channel = max(1, min(int(query.get("limit", 200)), _PER_CHANNEL_CAP))
+        per_channel = max(1, min(int(query.get("limit", 500)), _PER_CHANNEL_CAP))
         min_date = _parse_dt(query.get("min_date"))
 
         client = TelegramClient(StringSession(session), int(api_id), api_hash)
@@ -110,7 +110,7 @@ class TelegramAdapter(BaseAdapter):
                 )
             if not channels:  # keyword-capable: temukan channel publik dari keyword
                 channels = await _discover_channels(
-                    client, keywords, int(query.get("max_channels", 6)))
+                    client, keywords, int(query.get("max_channels", 10)))
                 if not channels:
                     return
             for uname in channels:

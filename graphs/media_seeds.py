@@ -52,7 +52,7 @@ def _spread(media: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
 def sitemap_sources(
     keywords: list[str],
     categories: list[str] | None = None,
-    per_site: int = 30,
+    per_site: int = 80,
     limit: int | None = None,
 ) -> list[dict]:
     """→ spec sumber `sitemap` (satu per portal). match='url' (murah): hanya artikel
