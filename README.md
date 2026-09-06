@@ -23,13 +23,14 @@ Dokumen ini **tidak melebih-lebihkan**. Penanda status dipakai konsisten:
 
 ---
 
-## Yang dilakukan platform (4 pilar)
+## Yang dilakukan platform (pilar)
 
 | Pilar | Ringkas | Status |
 |---|---|---|
 | **Forensik narasi & sentimen** | koleksi → klasifikasi IndoBERT → klaster narasi (Graph C) → kuadran otentisitas×kebenaran, deteksi CIB | ✅ |
 | **Skor reputasi agregat** | rating bintang review (Play/App Store) + sentimen teks → indeks reputasi 0-100 + distribusi + per-platform | ✅ |
 | **Early Warning (deteksi krisis)** | lonjakan komentar negatif per jam vs baseline → level calm/elevated/spike + alert **Telegram/email gratis** ke tim PR (dedup) | ✅ |
+| **ABSA (sentimen per-aspek)** | pecah sentimen per aspek bisnis (Harga/Produk/Pelayanan/Pengiriman/Aplikasi) via leksikon lokal — bukan cuma positif/negatif global | ✅ |
 | **Scan Commander (autonomous loop)** | 1 keyword → agen pilih sumber → koleksi → analisis penuh **otomatis** | ✅ |
 | **Verifikasi klaim** | klaim narasi diadu ke ground-truth resmi **BPS/BMKG** (Graph E, gaya AVeriTeC) | ✅ |
 | **Riset Pasar Geospasial** | kategori + lokasi → peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap) | ✅ |

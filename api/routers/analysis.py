@@ -99,6 +99,21 @@ async def early_warning(
     return status
 
 
+@router.get("/{investigation_id}/aspects")
+async def aspects(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> dict:
+    """ABSA: sentimen per-aspek bisnis (harga/produk/pelayanan/pengiriman/aplikasi)."""
+    from core.absa import aggregate_aspects
+
+    rows = (await session.execute(
+        select(Comment.content, Analysis.sentiment)
+        .outerjoin(Analysis, Analysis.comment_id == Comment.id)
+        .where(Comment.investigation_id == investigation_id)
+    )).all()
+    return aggregate_aspects([{"text": c, "sentiment": s} for (c, s) in rows])
+
+
 @router.get("/{investigation_id}/stats")
 async def analysis_stats(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser

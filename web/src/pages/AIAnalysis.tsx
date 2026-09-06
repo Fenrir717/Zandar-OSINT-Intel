@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
+import { api, type AnalysisStats, type AspectsResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -17,6 +17,42 @@ const tip = { background: "var(--surface)", border: "1px solid var(--line)", bor
 
 function arr(d: Record<string, number> | undefined) {
   return Object.entries(d || {}).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+}
+
+function AspectCard({ asp }: { asp: AspectsResult }) {
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Sentimen per Aspek <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· ABSA</span></h3>
+        <Pill tone="muted">{asp.with_aspect.toLocaleString("id")} komentar ber-aspek</Pill>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+        {asp.aspects.map((a) => {
+          const c = a.count || 1;
+          const tone = a.sentiment === "positif" ? "ok" : a.sentiment === "negatif" ? "crit" : "muted";
+          return (
+            <div key={a.aspect}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, marginBottom: 4 }}>
+                <b>{a.label}</b>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Pill tone={tone as "ok" | "crit" | "muted"}>{a.sentiment} · {a.net_sentiment > 0 ? "+" : ""}{a.net_sentiment}</Pill>
+                  <span className="tnum" style={{ color: "var(--faint)", minWidth: 34, textAlign: "right" }}>{a.count.toLocaleString("id")}</span>
+                </span>
+              </div>
+              <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", background: "var(--surface-2)" }} title={`positif ${a.pos} · netral ${a.neu} · negatif ${a.neg}`}>
+                <span style={{ width: `${(a.pos / c) * 100}%`, background: "var(--ok)" }} />
+                <span style={{ width: `${(a.neu / c) * 100}%`, background: "var(--line)" }} />
+                <span style={{ width: `${(a.neg / c) * 100}%`, background: "var(--crit)" }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 11, fontSize: 11, color: "var(--faint)" }}>
+        Aspek dideteksi via leksikon (produk · harga · pelayanan · pengiriman · aplikasi); sentimen agregat per-aspek.
+      </div>
+    </Card>
+  );
 }
 
 function EarlyWarningCard({ ew }: { ew: EarlyWarning }) {
@@ -108,6 +144,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const [stats, setStats] = useState<AnalysisStats | null>(null);
   const [rep, setRep] = useState<ReputationSummary | null>(null);
   const [ew, setEw] = useState<EarlyWarning | null>(null);
+  const [asp, setAsp] = useState<AspectsResult | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -121,15 +158,16 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp, w] = await Promise.all([
+      const [s, n, e, rp, w, ap] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
         api.reputation(selected).catch(() => null),
         api.earlyWarning(selected).catch(() => null),
+        api.aspects(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -158,6 +196,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
       {ew && (ew.level !== "calm" || ew.total_negative > 0) && <EarlyWarningCard ew={ew} />}
 
       {rep && rep.total > 0 && rep.reputation_index != null && <ReputationCard rep={rep} />}
+
+      {asp && asp.aspects.length > 0 && <AspectCard asp={asp} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>

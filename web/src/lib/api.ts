@@ -125,6 +125,13 @@ export interface ReputationSummary {
   by_platform: Record<string, { count: number; avg_rating: number | null; rated: number }>;
   caveats: string[];
 }
+export interface AspectSentiment {
+  aspect: string; label: string; pos: number; neg: number; neu: number;
+  count: number; net_sentiment: number; sentiment: string;
+}
+export interface AspectsResult {
+  aspects: AspectSentiment[]; total: number; with_aspect: number; caveats: string[];
+}
 export interface EarlyWarning {
   level: "calm" | "elevated" | "spike";
   current: number; baseline: number; ratio: number; z: number;
@@ -293,6 +300,7 @@ export const api = {
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
   reputation: (inv: string) => req<ReputationSummary>(`/analysis/${inv}/reputation`),
   earlyWarning: (inv: string, hours = 48) => req<EarlyWarning>(`/analysis/${inv}/early-warning?hours=${hours}`),
+  aspects: (inv: string) => req<AspectsResult>(`/analysis/${inv}/aspects`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {
