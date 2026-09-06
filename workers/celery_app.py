@@ -36,6 +36,12 @@ celery_app.conf.update(
         "dispatch-due-collections": {
             "task": "workers.tasks.dispatch_due_collections",
             "schedule": 60.0,
-        }
+        },
+        # Early Warning proaktif: sapu investigasi aktif tiap 15 menit → deteksi
+        # lonjakan negatif → alert Telegram/email otomatis (dedup 3 jam).
+        "early-warning-sweep": {
+            "task": "workers.tasks.dispatch_early_warning",
+            "schedule": 900.0,
+        },
     },
 )

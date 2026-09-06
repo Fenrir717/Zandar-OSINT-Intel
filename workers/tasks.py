@@ -352,6 +352,24 @@ async def _check_early_warning(investigation_id: str, hours: int) -> dict:
     return {"investigation_id": investigation_id, **status, "alerted": alerted}
 
 
+@celery_app.task
+def dispatch_early_warning() -> dict:
+    """Beat: sapu Early Warning untuk tiap investigasi AKTIF secara berkala (proaktif).
+    check_early_warning sendiri idempoten + dedup, jadi aman dipanggil rutin."""
+    return asyncio.run(_dispatch_early_warning())
+
+
+async def _dispatch_early_warning() -> dict:
+    async with worker_session() as session:
+        rows = (await session.execute(
+            select(Investigation.id).where(Investigation.status != "done")
+        )).all()
+    ids = [str(r[0]) for r in rows]
+    for iid in ids:
+        check_early_warning.delay(iid)
+    return {"dispatched": len(ids)}
+
+
 # ---------------------------------------------------------------- Autonomous loop (Commander)
 
 @celery_app.task(bind=True)
