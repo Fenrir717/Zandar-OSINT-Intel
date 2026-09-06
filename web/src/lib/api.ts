@@ -115,6 +115,7 @@ export interface AnalysisStats {
   sentiment: Record<string, number>; emotion: Record<string, number>;
   intent: Record<string, number>; avg_sentiment: number | null;
   bot_suspect: number; avg_confidence: number | null; sarcasm: number; low_confidence: number;
+  spam_duplicates?: number;
   sentiment_trend: { day: string; avg: number; count: number }[];
 }
 export interface ReputationSummary {

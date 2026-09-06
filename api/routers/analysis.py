@@ -286,20 +286,27 @@ async def analysis_stats(
         .where(Comment.investigation_id == inv)
     )
 
-    async def dist(col):
-        res = await session.execute(
-            select(col, func.count())
-            .join(Comment, Comment.id == Analysis.comment_id)
-            .where(Comment.investigation_id == inv)
-            .group_by(col)
-        )
-        return {(k or "?"): c for k, c in res.all()}
-
-    avg_sent = await session.scalar(
-        select(func.avg(Analysis.sentiment_score))
+    # Distribusi DEDUPED: buang duplikat-spam (bot repetisi) agar sentimen/emosi tak
+    # bias. Riset: scam 791× bisa geser negatif 34%→20%. Buzzer tetap data mentah.
+    from core.dedup import keep_rows
+    adf = (await session.execute(
+        select(Comment.author_hash, Comment.dedup_hash, Analysis.sentiment,
+               Analysis.emotion, Analysis.intent, Analysis.sentiment_score)
         .join(Comment, Comment.id == Analysis.comment_id)
         .where(Comment.investigation_id == inv)
-    )
+    )).all()
+    kept = keep_rows(adf, 0, 1)
+    spam_dup = len(adf) - len(kept)
+
+    def dist_idx(idx: int) -> dict:
+        c: dict = {}
+        for r in kept:
+            k = r[idx] or "?"
+            c[k] = c.get(k, 0) + 1
+        return c
+
+    _scores = [float(r[5]) for r in kept if r[5] is not None]
+    avg_sent = sum(_scores) / len(_scores) if _scores else None
     bots = await session.scalar(
         select(func.count())
         .select_from(Analysis)
@@ -345,14 +352,15 @@ async def analysis_stats(
         "total": total or 0,
         "analyzed": analyzed or 0,
         "coverage": round((analyzed or 0) / total, 3) if total else 0,
-        "sentiment": await dist(Analysis.sentiment),
-        "emotion": await dist(Analysis.emotion),
-        "intent": await dist(Analysis.intent),
-        "avg_sentiment": round(float(avg_sent), 3) if avg_sent is not None else None,
+        "sentiment": dist_idx(2),
+        "emotion": dist_idx(3),
+        "intent": dist_idx(4),
+        "avg_sentiment": round(avg_sent, 3) if avg_sent is not None else None,
         "bot_suspect": bots or 0,
         "avg_confidence": round(float(avg_conf), 3) if avg_conf is not None else None,
         "sarcasm": sarcasm or 0,
         "low_confidence": low_conf or 0,
+        "spam_duplicates": spam_dup,
         "sentiment_trend": trend,
     }
 
