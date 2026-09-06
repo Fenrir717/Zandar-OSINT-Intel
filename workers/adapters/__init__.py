@@ -33,6 +33,7 @@ from workers.adapters.nitter import NitterAdapter
 from workers.adapters.playstore import PlayStoreAdapter
 from workers.adapters.reddit import RedditAdapter
 from workers.adapters.rss import RssAdapter
+from workers.adapters.sitemap import SitemapAdapter
 from workers.adapters.telegram import TelegramAdapter
 from workers.adapters.tiktok import TikTokAdapter
 from workers.adapters.wayback import WaybackAdapter
@@ -43,7 +44,7 @@ from workers.adapters.youtube import YouTubeAdapter
 from workers.adapters.youtube_transcript import YouTubeTranscriptAdapter
 
 _CLASSES: list[type[BaseAdapter]] = [
-    RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, ForumAdapter, GitHubAdapter,
+    RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, SitemapAdapter, ForumAdapter, GitHubAdapter,
     YouTubeAdapter, RedditAdapter, PlayStoreAdapter, AppStoreAdapter,
     TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)

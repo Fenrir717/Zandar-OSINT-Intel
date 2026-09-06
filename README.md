@@ -145,7 +145,7 @@ di `geo/catalog.py` — tambah kategori = tambah entri, engine tak berubah.
 
 ---
 
-## Adapter koleksi (22 metode, 3 tier)
+## Adapter koleksi (23 metode, 3 tier)
 
 Semua adapter berbagi kontrak `collect(query) → RawItem[]` dan mendeklarasikan metadata
 akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters`.
@@ -159,6 +159,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `playstore` | free | ✅ keyword | **review aplikasi** (bintang + teks) — sinyal reputasi terstruktur; brand → app → review |
 | `appstore` | free | ✅ keyword | **review iOS** (Apple RSS publik) — melengkapi playstore untuk reputasi app |
 | `website` | free | 🔗 URL | web_extract (hormat robots.txt); **diisi otomatis oleh agen Recon** |
+| `sitemap` | free | 🔗 URL | **koleksi bulk arsip situs** via sitemap.xml (index bertingkat + .gz) → ekstraksi trafilatura; portal berita ID skala arsip penuh, filter tanggal/keyword. Jalur patuh (sitemap = undangan crawler), tanpa proxy/evasion |
 | `blog` | free | 🔗 URL | autodiscovery feed → teks penuh |
 | `forum` | free | 🔗 URL | Discourse JSON; tanpa `base_url` → fail-soft (0, bukan error) |
 | `wayback` | free | 🔗 URL | arsip Archive.org — **bulk CDX** (paginasi resumeKey + sampling temporal lintas tahun); mode `extract` (teks artikel) / `index` (bukti keberadaan URL, murah, volume besar); konten dihapus & evolusi narasi |

@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     alert_email_to: str = ""             # penerima email alert (koma untuk banyak)
 
+    # Adapter Telegram (koleksi channel publik, MTProto) — default; Sources.config menimpa.
+    # api_id/api_hash dari my.telegram.org; session = StringSession (dibuat sekali via auth lokal).
+    telegram_api_id: str = ""            # env: TELEGRAM_API_ID
+    telegram_api_hash: str = ""          # env: TELEGRAM_API_HASH
+    telegram_session: str = ""           # env: TELEGRAM_SESSION
+
 
 @lru_cache
 def get_settings() -> Settings:
