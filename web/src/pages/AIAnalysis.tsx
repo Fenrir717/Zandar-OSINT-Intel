@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type AspectsResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
+import { api, type AnalysisStats, type AspectsResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -50,6 +50,52 @@ function AspectCard({ asp }: { asp: AspectsResult }) {
       </div>
       <div style={{ marginTop: 11, fontSize: 11, color: "var(--faint)" }}>
         Aspek dideteksi via leksikon (produk · harga · pelayanan · pengiriman · aplikasi); sentimen agregat per-aspek.
+      </div>
+    </Card>
+  );
+}
+
+function nssTone(nss: number | null): "ok" | "crit" | "warn" | "muted" {
+  if (nss == null) return "muted";
+  return nss > 10 ? "ok" : nss < -10 ? "crit" : "warn";
+}
+
+function ShareOfVoiceCard({ sov }: { sov: ShareOfVoiceResult }) {
+  const maxSov = Math.max(...sov.brands.map((b) => b.share_of_voice), 1);
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Share of Voice &amp; Net Sentiment <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· SoV / NSS</span></h3>
+        <Pill tone="muted">{sov.count} merek · {sov.total_volume.toLocaleString("id")} sebutan</Pill>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 13 }}>
+        Panjang bar = pangsa suara; warna = net sentiment (hijau dipuji · merah dihujat). Volume tinggi belum tentu positif.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {sov.brands.map((b, i) => {
+          const tone = nssTone(b.nss);
+          const barColor = tone === "muted" ? "var(--line)" : `var(--${tone})`;
+          return (
+            <div key={b.name}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, marginBottom: 4, gap: 8 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <span className="tnum" style={{ color: "var(--faint)", fontSize: 11, minWidth: 16 }}>{i + 1}.</span>
+                  <b style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</b>
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <Pill tone={tone}>NSS {b.nss == null ? "—" : (b.nss > 0 ? "+" : "") + b.nss}</Pill>
+                  <span className="tnum" style={{ minWidth: 42, textAlign: "right" }}>{b.share_of_voice}%</span>
+                </span>
+              </div>
+              <div style={{ height: 10, borderRadius: 5, overflow: "hidden", background: "var(--surface-2)" }} title={`${b.volume.toLocaleString("id")} sebutan · positif ${b.pos} · netral ${b.neu} · negatif ${b.neg}`}>
+                <span style={{ display: "block", height: "100%", width: `${(b.share_of_voice / maxSov) * 100}%`, background: barColor }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 12, fontSize: 11, color: "var(--faint)" }}>
+        Merek = entitas organisasi hasil NER; SoV relatif terhadap organisasi terdeteksi di investigasi ini.
       </div>
     </Card>
   );
@@ -145,6 +191,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const [rep, setRep] = useState<ReputationSummary | null>(null);
   const [ew, setEw] = useState<EarlyWarning | null>(null);
   const [asp, setAsp] = useState<AspectsResult | null>(null);
+  const [sov, setSov] = useState<ShareOfVoiceResult | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -158,16 +205,17 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp, w, ap] = await Promise.all([
+      const [s, n, e, rp, w, ap, sv] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
         api.reputation(selected).catch(() => null),
         api.earlyWarning(selected).catch(() => null),
         api.aspects(selected).catch(() => null),
+        api.shareOfVoice(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -198,6 +246,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
       {rep && rep.total > 0 && rep.reputation_index != null && <ReputationCard rep={rep} />}
 
       {asp && asp.aspects.length > 0 && <AspectCard asp={asp} />}
+
+      {sov && sov.brands.length >= 2 && <ShareOfVoiceCard sov={sov} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>

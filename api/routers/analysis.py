@@ -114,6 +114,27 @@ async def aspects(
     return aggregate_aspects([{"text": c, "sentiment": s} for (c, s) in rows])
 
 
+@router.get("/{investigation_id}/share-of-voice")
+async def share_of_voice(
+    investigation_id: uuid.UUID, user: CurrentUser, top: int = 10
+) -> dict:
+    """SoV + NSS: pangsa suara & net-sentiment merek vs kompetitor.
+
+    Sumber = entitas ORGANISASI di knowledge graph (butuh graph sudah dibangun
+    SETELAH klasifikasi). Neo4j mati / graph kosong → {brands: []}."""
+    import asyncio
+
+    from core import graph
+    from core.share_of_voice import compute_sov
+
+    try:
+        # Ambil banyak entitas lalu compute_sov memfilter tipe organisasi + peringkat.
+        ents = await asyncio.to_thread(graph.read_entities, str(investigation_id), 100)
+    except Exception:  # noqa: BLE001 — Neo4j mati / graph belum dibangun → kosong
+        ents = []
+    return compute_sov(ents, top=top)
+
+
 @router.get("/{investigation_id}/stats")
 async def analysis_stats(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser

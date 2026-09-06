@@ -132,6 +132,14 @@ export interface AspectSentiment {
 export interface AspectsResult {
   aspects: AspectSentiment[]; total: number; with_aspect: number; caveats: string[];
 }
+export interface BrandVoice {
+  name: string; volume: number; share_of_voice: number; nss: number | null;
+  pos: number; neg: number; neu: number;
+}
+export interface ShareOfVoiceResult {
+  brands: BrandVoice[]; total_volume: number; count: number;
+  leader: string | null; caveats: string[];
+}
 export interface EarlyWarning {
   level: "calm" | "elevated" | "spike";
   current: number; baseline: number; ratio: number; z: number;
@@ -301,6 +309,7 @@ export const api = {
   reputation: (inv: string) => req<ReputationSummary>(`/analysis/${inv}/reputation`),
   earlyWarning: (inv: string, hours = 48) => req<EarlyWarning>(`/analysis/${inv}/early-warning?hours=${hours}`),
   aspects: (inv: string) => req<AspectsResult>(`/analysis/${inv}/aspects`),
+  shareOfVoice: (inv: string, top = 10) => req<ShareOfVoiceResult>(`/analysis/${inv}/share-of-voice?top=${top}`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {
