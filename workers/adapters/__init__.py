@@ -28,6 +28,7 @@ from workers.adapters.github import GitHubAdapter
 from workers.adapters.har_import import HarImportAdapter
 from workers.adapters.news import NewsAdapter
 from workers.adapters.nitter import NitterAdapter
+from workers.adapters.playstore import PlayStoreAdapter
 from workers.adapters.reddit import RedditAdapter
 from workers.adapters.rss import RssAdapter
 from workers.adapters.telegram import TelegramAdapter
@@ -41,7 +42,7 @@ from workers.adapters.youtube_transcript import YouTubeTranscriptAdapter
 
 _CLASSES: list[type[BaseAdapter]] = [
     RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, ForumAdapter, GitHubAdapter,
-    YouTubeAdapter, RedditAdapter, TelegramAdapter, XAdapter, TikTokAdapter,
+    YouTubeAdapter, RedditAdapter, PlayStoreAdapter, TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
     BPSAdapter, BMKGAdapter, CkanAdapter,  # ground truth resmi (statistik, gempa, data terbuka)

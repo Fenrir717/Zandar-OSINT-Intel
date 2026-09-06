@@ -23,11 +23,10 @@ from langgraph.types import interrupt
 from graphs.llm import Usage, get_llm
 from workers.adapters import ADAPTERS, describe_all
 
-
 # Kapabilitas koleksi per adapter (untuk memandu select_sources):
 #  keyword-OK  = produktif hanya dengan keywords (tanpa URL/target)
 #  butuh-URL   = perlu base_url/feeds/urls konkret → jangan dipilih untuk scan keyword-only
-_KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube"}
+_KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube", "playstore"}
 _NEEDS_TARGET = {"blog", "website", "forum", "nitter", "satudata", "ckan"}
 
 
@@ -119,11 +118,12 @@ def _node_select_sources(state: PlannerState) -> dict:
         "Pilih sumber koleksi OSINT. WAJIB pilih HANYA dari daftar 'platform' berikut "
         "(pakai kunci persis apa adanya).\n"
         "ATURAN untuk scan berbasis KEYWORD (tanpa URL target dari analis):\n"
-        "- Pilih HANYA sumber bertanda [keyword-OK]: rss, news, reddit, youtube.\n"
+        "- Pilih HANYA sumber bertanda [keyword-OK]: rss, news, reddit, youtube, playstore.\n"
+        "- Untuk analisis REPUTASI/brand, playstore (review aplikasi) sangat relevan.\n"
         "- JANGAN pilih sumber [butuh-URL] (blog/website/forum/nitter) — tak ada target.\n"
         "- JANGAN pilih sumber [kredensial-BELUM]; boleh pilih [kredensial-OK] (mis. youtube).\n"
-        "- Query tiap sumber cukup {keywords,timespan}. youtube & reddit JUGA pakai "
-        "{keywords} (bukan video_ids/subreddits). Tambah fetch_full_text:true untuk news.\n\n"
+        "- Query tiap sumber cukup {keywords,timespan}. youtube, reddit & playstore JUGA "
+        "pakai {keywords} (bukan video_ids/subreddits/app_ids). fetch_full_text:true untuk news.\n\n"
         f"PLATFORM TERSEDIA:\n{_source_catalog()}\n\n"
         'Balas JSON: {"sources":[{"platform":"<kunci>","query":{"keywords":[...],"timespan":"90d"},"est_items":<int>}]}'
     )

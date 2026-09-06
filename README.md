@@ -140,7 +140,7 @@ di `geo/catalog.py` — tambah kategori = tambah entri, engine tak berubah.
 
 ---
 
-## Adapter koleksi (18 metode, 3 tier)
+## Adapter koleksi (19 metode, 3 tier)
 
 Semua adapter berbagi kontrak `collect(query) → RawItem[]` dan mendeklarasikan metadata
 akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters`.
@@ -151,6 +151,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `news` | free | ✅ keyword | GDELT DOC 2.0; fallback Google News bila GDELT keblok |
 | `reddit` | free | ✅ keyword | `search.json` publik; tanpa subreddit → pencarian global |
 | `youtube` | free | ✅ keyword 🔑 | Data API; tanpa `video_ids` → **search.list** dari keyword → komentar |
+| `playstore` | free | ✅ keyword | **review aplikasi** (bintang + teks) — sinyal reputasi terstruktur; brand → app → review |
 | `website` | free | 🔗 URL | web_extract (hormat robots.txt); **diisi otomatis oleh agen Recon** |
 | `blog` | free | 🔗 URL | autodiscovery feed → teks penuh |
 | `forum` | free | 🔗 URL | Discourse JSON; tanpa `base_url` → fail-soft (0, bukan error) |
