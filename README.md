@@ -33,6 +33,7 @@ Dokumen ini **tidak melebih-lebihkan**. Penanda status dipakai konsisten:
 | **ABSA (sentimen per-aspek)** | pecah sentimen per aspek bisnis (Harga/Produk/Pelayanan/Pengiriman/Aplikasi) via leksikon lokal — bukan cuma positif/negatif global | ✅ |
 | **Share of Voice + NSS** | pangsa suara merek vs kompetitor (volume) + Net Sentiment Score per merek — dari entitas organisasi di knowledge graph | ✅ |
 | **Buzzer / amplifikasi** | deteksi akun buzzer via perilaku (repetisi konten, koordinasi lintas-akun, burst timing) + klaster kampanye — pseudonim, tanpa data follower | ✅ |
+| **Keyword discovery (grounded)** | tambang keyword baru dari data NYATA (hashtag/entitas/frasa dominan) untuk perluas scan — bukan sinonim karangan LLM | ✅ |
 | **Scan Commander (autonomous loop)** | 1 keyword → agen pilih sumber → koleksi → analisis penuh **otomatis** | ✅ |
 | **Verifikasi klaim** | klaim narasi diadu ke ground-truth resmi **BPS/BMKG** (Graph E, gaya AVeriTeC) | ✅ |
 | **Riset Pasar Geospasial** | kategori + lokasi → peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap) | ✅ |

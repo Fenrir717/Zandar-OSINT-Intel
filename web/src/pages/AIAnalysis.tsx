@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type AspectsResult, type BuzzerResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
+import { api, type AnalysisStats, type AspectsResult, type BuzzerResult, type EarlyWarning, type EntitySentiment, type Evidence, type KeywordSuggestionsResult, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -50,6 +50,34 @@ function AspectCard({ asp }: { asp: AspectsResult }) {
       </div>
       <div style={{ marginTop: 11, fontSize: 11, color: "var(--faint)" }}>
         Aspek dideteksi via leksikon (produk · harga · pelayanan · pengiriman · aplikasi); sentimen agregat per-aspek.
+      </div>
+    </Card>
+  );
+}
+
+function kwKindTone(kind: string): "violet" | "info" | "muted" {
+  return kind === "hashtag" ? "violet" : kind === "entitas" ? "info" : "muted";
+}
+
+function KeywordSuggestCard({ kw }: { kw: KeywordSuggestionsResult }) {
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Keyword dari Data Ini <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· AI · grounded</span></h3>
+        <Pill tone="muted">{kw.suggestions.length} saran · {kw.total_comments.toLocaleString("id")} komentar</Pill>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 13 }}>
+        Ditambang dari hashtag/entitas/frasa yang publik <b>benar-benar</b> ucapkan (bukan sinonim karangan) — angle scan baru untuk perluas jangkauan.
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {kw.suggestions.map((s) => (
+          <span key={s.keyword} title={`${s.kind} · disebut ${s.count.toLocaleString("id")}x`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 9px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--surface-2)" }}>
+            <Pill tone={kwKindTone(s.kind)}>{s.kind}</Pill>
+            <b style={{ fontSize: 12.5 }}>{s.keyword}</b>
+            <span className="tnum" style={{ color: "var(--faint)", fontSize: 11 }}>{s.count.toLocaleString("id")}×</span>
+          </span>
+        ))}
       </div>
     </Card>
   );
@@ -253,6 +281,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const [asp, setAsp] = useState<AspectsResult | null>(null);
   const [sov, setSov] = useState<ShareOfVoiceResult | null>(null);
   const [buz, setBuz] = useState<BuzzerResult | null>(null);
+  const [kw, setKw] = useState<KeywordSuggestionsResult | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -266,7 +295,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp, w, ap, sv, bz] = await Promise.all([
+      const [s, n, e, rp, w, ap, sv, bz, kwR] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
@@ -275,9 +304,10 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         api.aspects(selected).catch(() => null),
         api.shareOfVoice(selected).catch(() => null),
         api.buzzer(selected).catch(() => null),
+        api.keywordSuggestions(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv); setBuz(bz);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); setBuz(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv); setBuz(bz); setKw(kwR);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); setBuz(null); setKw(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -312,6 +342,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
       {sov && sov.brands.length >= 2 && <ShareOfVoiceCard sov={sov} />}
 
       {buz && (buz.suspect_accounts > 0 || buz.coordinated_clusters > 0) && <BuzzerCard buz={buz} />}
+
+      {kw && kw.suggestions.length > 0 && <KeywordSuggestCard kw={kw} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>

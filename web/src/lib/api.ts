@@ -151,6 +151,12 @@ export interface BuzzerResult {
   total_accounts: number; suspect_accounts: number; coordinated_clusters: number;
   caveats: string[];
 }
+export interface KeywordSuggestion {
+  keyword: string; kind: string; count: number; score: number;
+}
+export interface KeywordSuggestionsResult {
+  suggestions: KeywordSuggestion[]; total_comments: number; seed: string[]; caveats: string[];
+}
 export interface EarlyWarning {
   level: "calm" | "elevated" | "spike";
   current: number; baseline: number; ratio: number; z: number;
@@ -322,6 +328,7 @@ export const api = {
   aspects: (inv: string) => req<AspectsResult>(`/analysis/${inv}/aspects`),
   shareOfVoice: (inv: string, top = 10) => req<ShareOfVoiceResult>(`/analysis/${inv}/share-of-voice?top=${top}`),
   buzzer: (inv: string, top = 12) => req<BuzzerResult>(`/analysis/${inv}/buzzer?top=${top}`),
+  keywordSuggestions: (inv: string, top = 15) => req<KeywordSuggestionsResult>(`/analysis/${inv}/keyword-suggestions?top=${top}`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {

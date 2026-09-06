@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Date, cast, func, or_, select
 
 from api.deps import CurrentUser, DbSession
-from core.models import Analysis, AuditLog, Comment, Investigation, Narrative
+from core.models import Analysis, AuditLog, Collection, Comment, Investigation, Narrative
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -153,6 +153,39 @@ async def buzzer(
         for (a, p, d, ts, c) in rows
     ]
     return score_accounts(items, top=top)
+
+
+@router.get("/{investigation_id}/keyword-suggestions")
+async def keyword_suggestions(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, top: int = 15
+) -> dict:
+    """AI penemu keyword dari DATA NYATA — tambang hashtag/entitas/frasa dominan dari
+    komentar terkumpul → angle keyword baru untuk scan lanjutan (grounded, bukan
+    sinonim karangan). Seed (keyword scan asli) dikecualikan agar hasil benar-benar baru."""
+    import asyncio
+
+    from core import graph
+    from core.keywords import suggest_keywords
+
+    rows = (await session.execute(
+        select(Comment.content).where(Comment.investigation_id == investigation_id)
+    )).all()
+    comments = [r[0] for r in rows if r[0]]
+
+    # seed = keyword scan asli dari query collection (agar tak disarankan ulang)
+    seed: list[str] = []
+    cols = (await session.execute(
+        select(Collection.query).where(Collection.investigation_id == investigation_id)
+    )).all()
+    for (q,) in cols:
+        if isinstance(q, dict):
+            seed += [str(k) for k in (q.get("keywords") or [])]
+
+    try:
+        ents = await asyncio.to_thread(graph.read_entities, str(investigation_id), 30)
+    except Exception:  # noqa: BLE001 — Neo4j mati/graph kosong → tanpa entitas
+        ents = []
+    return suggest_keywords(comments, ents, seed, top=top)
 
 
 @router.get("/{investigation_id}/stats")
