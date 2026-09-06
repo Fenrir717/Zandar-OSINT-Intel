@@ -263,16 +263,21 @@ def build_graph(self, investigation_id: str, batch_size: int = 500) -> dict:
 async def _build_graph(investigation_id: str, batch_size: int) -> dict:
     async with worker_session() as session:
         rows = (await session.execute(
-            select(Comment.content, Analysis.sentiment, Analysis.sentiment_score, Analysis.emotion)
+            select(Comment.author_hash, Comment.dedup_hash, Comment.content,
+                   Analysis.sentiment, Analysis.sentiment_score, Analysis.emotion)
             .outerjoin(Analysis, Analysis.comment_id == Comment.id)
             .where(Comment.investigation_id == uuid.UUID(investigation_id))
         )).all()
-    texts = [r[0] for r in rows]
+    # Eliminasi data cacat: collapse spam-bot (konten identik masif dari sedikit akun)
+    # agar entitas/graph/SoV tak tergelembungkan repetisi (mis. scam Telegram 791×).
+    from core.dedup import keep_rows
+    rows = keep_rows(rows, author_idx=0, dedup_idx=1)
+    texts = [r[2] for r in rows]
     if not texts:
         return {"investigation_id": investigation_id, "nodes": 0, "edges": 0, "note": "belum ada komentar"}
     # Sentimen per komentar (sejajar texts) → ditautkan ke entitas (Tier 2).
     sentiments = [
-        {"sentiment": r[1], "score": float(r[2]) if r[2] is not None else None, "emotion": r[3]}
+        {"sentiment": r[3], "score": float(r[4]) if r[4] is not None else None, "emotion": r[5]}
         for r in rows
     ]
     res = await asyncio.to_thread(_ner_and_write, investigation_id, texts, sentiments)

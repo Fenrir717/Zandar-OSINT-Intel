@@ -105,13 +105,15 @@ async def aspects(
 ) -> dict:
     """ABSA: sentimen per-aspek bisnis (harga/produk/pelayanan/pengiriman/aplikasi)."""
     from core.absa import aggregate_aspects
+    from core.dedup import keep_rows
 
     rows = (await session.execute(
-        select(Comment.content, Analysis.sentiment)
+        select(Comment.author_hash, Comment.dedup_hash, Comment.content, Analysis.sentiment)
         .outerjoin(Analysis, Analysis.comment_id == Comment.id)
         .where(Comment.investigation_id == investigation_id)
     )).all()
-    return aggregate_aspects([{"text": c, "sentiment": s} for (c, s) in rows])
+    rows = keep_rows(rows, 0, 1)  # eliminasi spam-bot sebelum agregasi aspek
+    return aggregate_aspects([{"text": c, "sentiment": s} for (_a, _d, c, s) in rows])
 
 
 @router.get("/{investigation_id}/share-of-voice")
@@ -172,9 +174,12 @@ async def keyword_suggestions(
     from core.keywords import suggest_keywords
 
     rows = (await session.execute(
-        select(Comment.content).where(Comment.investigation_id == investigation_id)
+        select(Comment.author_hash, Comment.dedup_hash, Comment.content)
+        .where(Comment.investigation_id == investigation_id)
     )).all()
-    comments = [r[0] for r in rows if r[0]]
+    from core.dedup import keep_rows  # eliminasi spam-bot (repetisi masif) sebelum tambang
+    rows = keep_rows(rows, 0, 1)
+    comments = [r[2] for r in rows if r[2]]
 
     # seed = keyword scan asli dari query collection (agar tak disarankan ulang)
     seed: list[str] = []
