@@ -1,30 +1,68 @@
-// Layout aplikasi: sidebar ikon + header lengket. Responsif (drawer < 900px), toggle tema.
+// Layout aplikasi: workspace switcher + sidebar adaptif + header lengket. Responsif.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Icon, type IconName } from "./icons";
 
-const NAV: { section: string; items: { to: string; label: string; icon: IconName; phase?: string }[] }[] = [
-  { section: "Overview", items: [
-    { to: "/", label: "Dashboard", icon: "dashboard" },
-    { to: "/scan", label: "Scan", icon: "target" },
-    { to: "/projects", label: "Projects", icon: "projects" },
-    { to: "/investigations", label: "Investigations", icon: "search" },
-  ]},
-  { section: "Intelligence", items: [
-    { to: "/market", label: "Riset Pasar", icon: "target" },
-    { to: "/collections", label: "Collections", icon: "collections" },
-    { to: "/explorer", label: "Comment Explorer", icon: "comment" },
-    { to: "/analysis", label: "AI Analysis", icon: "analysis" },
-    { to: "/graph", label: "Knowledge Graph", icon: "graph" },
-    { to: "/timeline", label: "Timeline", icon: "timeline" },
-    { to: "/forensics", label: "Forensik Narasi", icon: "spark" },
-    { to: "/veracity", label: "Verifikasi Klaim", icon: "audit" },
-    { to: "/reports", label: "Reports", icon: "reports" },
-  ]},
-  { section: "System", items: [
-    { to: "/agents", label: "Agent Monitor", icon: "agents" },
-    { to: "/settings", label: "Settings", icon: "settings" },
-  ]},
+// Satu engine, tiga "produk" (workspace). Nav menyesuaikan mode aktif.
+export type Mode = "osint" | "market" | "brand";
+type NavGroup = { section: string; items: { to: string; label: string; icon: IconName }[] };
+
+const MODES: { id: Mode; label: string; icon: IconName; home: string; nav: NavGroup[] }[] = [
+  {
+    id: "osint", label: "Forensik OSINT", icon: "audit", home: "/",
+    nav: [
+      { section: "Overview", items: [
+        { to: "/", label: "Dashboard", icon: "dashboard" },
+        { to: "/scan", label: "Scan", icon: "target" },
+        { to: "/projects", label: "Projects", icon: "projects" },
+        { to: "/investigations", label: "Investigations", icon: "search" },
+      ]},
+      { section: "Intelijen", items: [
+        { to: "/collections", label: "Collections", icon: "collections" },
+        { to: "/explorer", label: "Comment Explorer", icon: "comment" },
+        { to: "/analysis", label: "AI Analysis", icon: "analysis" },
+        { to: "/graph", label: "Knowledge Graph", icon: "graph" },
+        { to: "/timeline", label: "Timeline", icon: "timeline" },
+        { to: "/forensics", label: "Forensik Narasi", icon: "spark" },
+        { to: "/veracity", label: "Verifikasi Klaim", icon: "audit" },
+        { to: "/reports", label: "Reports", icon: "reports" },
+      ]},
+      { section: "Sistem", items: [
+        { to: "/agents", label: "Agent Monitor", icon: "agents" },
+        { to: "/settings", label: "Settings", icon: "settings" },
+      ]},
+    ],
+  },
+  {
+    id: "market", label: "Riset Pasar", icon: "target", home: "/market",
+    nav: [
+      { section: "Riset Pasar", items: [
+        { to: "/market", label: "Analisis Lokasi", icon: "target" },
+        { to: "/projects", label: "Projects", icon: "projects" },
+        { to: "/reports", label: "Laporan", icon: "reports" },
+      ]},
+      { section: "Sistem", items: [
+        { to: "/settings", label: "Settings", icon: "settings" },
+      ]},
+    ],
+  },
+  {
+    id: "brand", label: "Brand Health", icon: "analysis", home: "/",
+    nav: [
+      { section: "Brand Health", items: [
+        { to: "/", label: "Dashboard", icon: "dashboard" },
+        { to: "/scan", label: "Pantau Brand", icon: "target" },
+        { to: "/analysis", label: "Sentimen & Reputasi", icon: "analysis" },
+        { to: "/explorer", label: "Ulasan & Komentar", icon: "comment" },
+        { to: "/graph", label: "Entitas & Kompetitor", icon: "graph" },
+        { to: "/reports", label: "Laporan", icon: "reports" },
+      ]},
+      { section: "Sistem", items: [
+        { to: "/agents", label: "Agent Monitor", icon: "agents" },
+        { to: "/settings", label: "Settings", icon: "settings" },
+      ]},
+    ],
+  },
 ];
 
 const SUBTITLE: Record<string, string> = {
@@ -47,9 +85,19 @@ export function Shell({ user, onLogout, right, title, children }: {
   onLogout: () => void; right?: ReactNode; title: string; children: ReactNode;
 }) {
   const loc = useLocation();
+  const nav = useNavigate();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("zandar_theme") || "light");
+  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("zandar_mode") as Mode) || "osint");
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { localStorage.setItem("zandar_mode", mode); }, [mode]);
+  const activeMode = MODES.find((m) => m.id === mode) || MODES[0];
+  function switchMode(m: Mode) {
+    setMode(m);
+    const target = MODES.find((x) => x.id === m);
+    if (target) nav(target.home);
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -80,7 +128,29 @@ export function Shell({ user, onLogout, right, title, children }: {
           </div>
         </div>
 
-        {NAV.map((grp) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "0 2px" }}>
+          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".13em", color: "var(--faint)", fontWeight: 700, padding: "0 10px 4px" }}>Workspace</div>
+          {MODES.map((m) => {
+            const on = m.id === mode;
+            return (
+              <button key={m.id} onClick={() => switchMode(m.id)} title={`Beralih ke ${m.label}`}
+                style={{
+                  display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 9,
+                  border: on ? "1px solid var(--accent)" : "1px solid transparent",
+                  background: on ? "var(--accent-soft)" : "transparent",
+                  color: on ? "var(--accent-ink)" : "var(--muted)", cursor: "pointer",
+                  fontSize: 12.5, fontWeight: on ? 700 : 500, textAlign: "left", width: "100%",
+                }}>
+                <Icon name={m.icon} size={16} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{m.label}</span>
+                {on && <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ height: 1, background: "var(--line)", margin: "8px 8px 2px" }} />
+
+        {activeMode.nav.map((grp) => (
           <div key={grp.section}>
             <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".13em", color: "var(--faint)", fontWeight: 700, padding: "14px 12px 5px" }}>{grp.section}</div>
             {grp.items.map((it) => (
@@ -90,7 +160,6 @@ export function Shell({ user, onLogout, right, title, children }: {
                   <>
                     <Icon name={it.icon} size={17} style={{ opacity: isActive ? 1 : .8, flexShrink: 0 }} />
                     <span style={{ flex: 1 }}>{it.label}</span>
-                    {it.phase && <span style={{ fontSize: 9, color: isActive ? "var(--accent-ink)" : "var(--faint)", fontWeight: 600 }}>{it.phase}</span>}
                     {isActive && <span aria-hidden style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 3, background: "var(--accent)" }} />}
                   </>
                 )}
