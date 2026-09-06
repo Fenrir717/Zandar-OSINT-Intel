@@ -21,7 +21,12 @@ def driver():
         from neo4j import GraphDatabase
 
         s = get_settings()
-        _driver = GraphDatabase.driver(s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password))
+        _driver = GraphDatabase.driver(
+            s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password),
+            connection_timeout=15.0,              # batas socket connect (hindari gantung saat konek)
+            connection_acquisition_timeout=30.0,  # batas tunggu koneksi dari pool
+            max_transaction_retry_time=20.0,      # batas retry transaksi terkelola
+        )
     return _driver
 
 

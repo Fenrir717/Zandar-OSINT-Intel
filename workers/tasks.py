@@ -384,6 +384,12 @@ def run_scan_pipeline(self, investigation_id: str) -> dict:
     return asyncio.run(_scan_pipeline(investigation_id))
 
 
+# Plafon waktu per-tahap (detik) — PENGAMAN anti-hang, bukan batas kerja wajar.
+# Bila satu tahap menggantung (mis. tulis Neo4j tanpa balasan), tahap itu dibatalkan
+# lalu pipeline LANJUT — bukan membekukan seluruh task diam-diam.
+_STAGE_TIMEOUT = {"classify": 7200, "embed": 3600, "narratives": 3600, "graph": 900}
+
+
 async def _scan_pipeline(investigation_id: str) -> dict:
     def emit(node: str, detail: str, status: str = "running") -> None:
         publish_agent_event({
@@ -404,8 +410,12 @@ async def _scan_pipeline(investigation_id: str) -> dict:
     )
     for node, detail, fn in stages:
         emit(node, detail)
+        limit = _STAGE_TIMEOUT.get(node, 1800)
         try:
-            out["stages"][node] = await fn()
+            out["stages"][node] = await asyncio.wait_for(fn(), timeout=limit)
+        except TimeoutError:  # tahap menggantung → batalkan, pipeline LANJUT
+            out["stages"][node] = {"error": f"timeout > {limit}s — tahap dilewati (anti-hang)"}
+            emit(node, "gagal: timeout", status="failed")
         except Exception as exc:  # tahap gagal dicatat, pipeline lanjut
             out["stages"][node] = {"error": f"{type(exc).__name__}: {exc}"}
             emit(node, f"gagal: {type(exc).__name__}", status="failed")
