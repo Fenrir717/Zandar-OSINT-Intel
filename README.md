@@ -34,6 +34,8 @@ Dokumen ini **tidak melebih-lebihkan**. Penanda status dipakai konsisten:
 | **Share of Voice + NSS** | pangsa suara merek vs kompetitor (volume) + Net Sentiment Score per merek — dari entitas organisasi di knowledge graph | ✅ |
 | **Buzzer / amplifikasi** | deteksi akun buzzer via perilaku (repetisi konten, koordinasi lintas-akun, burst timing) + klaster kampanye — pseudonim, tanpa data follower | ✅ |
 | **Keyword discovery (grounded)** | tambang keyword baru dari data NYATA (hashtag/entitas/frasa dominan) untuk perluas scan — bukan sinonim karangan LLM | ✅ |
+| **Deteksi kampanye scam** | klaster konten identik-masif diklasifikasi via signature (investasi bodong/admin palsu/lure Telegram/phishing) → intel impersonasi brand | ✅ |
+| **Higienis data (anti-FP)** | eliminasi data cacat: spam-bot di-collapse (dedup) sebelum sentimen/entitas/SoV/keyword; NER junk & sindikasi berita disaring — hasil tak bias | ✅ |
 | **Scan Commander (autonomous loop)** | 1 keyword → agen pilih sumber → koleksi → analisis penuh **otomatis** | ✅ |
 | **Verifikasi klaim** | klaim narasi diadu ke ground-truth resmi **BPS/BMKG** (Graph E, gaya AVeriTeC) | ✅ |
 | **Riset Pasar Geospasial** | kategori + lokasi → peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap) | ✅ |
