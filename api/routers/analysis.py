@@ -135,6 +135,26 @@ async def share_of_voice(
     return compute_sov(ents, top=top)
 
 
+@router.get("/{investigation_id}/buzzer")
+async def buzzer(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, top: int = 12
+) -> dict:
+    """Buzzer / amplifikasi terkoordinasi — sinyal perilaku (repetisi, koordinasi,
+    burst), BUKAN follower. Akun = pseudonim author_hash (privasi UU PDP)."""
+    from core.buzzer import score_accounts
+
+    rows = (await session.execute(
+        select(Comment.author_hash, Comment.platform, Comment.dedup_hash,
+               Comment.published_at, Comment.content)
+        .where(Comment.investigation_id == investigation_id)
+    )).all()
+    items = [
+        {"author": a, "platform": p, "dup": d, "ts": ts, "content": c}
+        for (a, p, d, ts, c) in rows
+    ]
+    return score_accounts(items, top=top)
+
+
 @router.get("/{investigation_id}/stats")
 async def analysis_stats(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser

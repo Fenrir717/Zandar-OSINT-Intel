@@ -140,6 +140,17 @@ export interface ShareOfVoiceResult {
   brands: BrandVoice[]; total_volume: number; count: number;
   leader: string | null; caveats: string[];
 }
+export interface BuzzerAccount {
+  account: string; platform: string; volume: number;
+  repetition: number; coordination: number; burst: number;
+  buzzer_score: number; suspect: boolean;
+}
+export interface BuzzerCluster { authors: number; posts: number; sample: string | null; }
+export interface BuzzerResult {
+  accounts: BuzzerAccount[]; clusters: BuzzerCluster[];
+  total_accounts: number; suspect_accounts: number; coordinated_clusters: number;
+  caveats: string[];
+}
 export interface EarlyWarning {
   level: "calm" | "elevated" | "spike";
   current: number; baseline: number; ratio: number; z: number;
@@ -310,6 +321,7 @@ export const api = {
   earlyWarning: (inv: string, hours = 48) => req<EarlyWarning>(`/analysis/${inv}/early-warning?hours=${hours}`),
   aspects: (inv: string) => req<AspectsResult>(`/analysis/${inv}/aspects`),
   shareOfVoice: (inv: string, top = 10) => req<ShareOfVoiceResult>(`/analysis/${inv}/share-of-voice?top=${top}`),
+  buzzer: (inv: string, top = 12) => req<BuzzerResult>(`/analysis/${inv}/buzzer?top=${top}`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {

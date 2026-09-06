@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type AspectsResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
+import { api, type AnalysisStats, type AspectsResult, type BuzzerResult, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -101,6 +101,66 @@ function ShareOfVoiceCard({ sov }: { sov: ShareOfVoiceResult }) {
   );
 }
 
+function BuzzerCard({ buz }: { buz: BuzzerResult }) {
+  const scoreTone = (s: number) => (s >= 0.5 ? "crit" : s >= 0.3 ? "warn" : "muted");
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Buzzer &amp; Amplifikasi <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· sinyal perilaku</span></h3>
+        <Pill tone={buz.suspect_accounts > 0 ? "crit" : "muted"}>{buz.suspect_accounts} diduga buzzer · {buz.total_accounts.toLocaleString("id")} akun</Pill>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 13 }}>
+        Skor = repetisi + koordinasi lintas-akun + burst timing. Akun = pseudonim (bukan identitas asli); mengukur amplifikasi, bukan follower.
+      </div>
+
+      {buz.accounts.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {buz.accounts.map((a) => {
+            const tone = scoreTone(a.buzzer_score);
+            return (
+              <div key={a.account}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12.5, marginBottom: 4, gap: 8 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <code style={{ fontSize: 11.5, color: "var(--ink)", background: "var(--surface-2)", padding: "1px 6px", borderRadius: 4 }}>{a.account}</code>
+                    <span style={{ color: "var(--faint)", fontSize: 11 }}>{a.platform}</span>
+                    {a.suspect && <Pill tone="crit">buzzer</Pill>}
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, color: "var(--faint)", fontSize: 11 }}>
+                    <span title="repetisi konten">rep {Math.round(a.repetition * 100)}%</span>
+                    <span title="koordinasi lintas-akun">koord {Math.round(a.coordination * 100)}%</span>
+                    <span title="jumlah posting" className="tnum">{a.volume}×</span>
+                  </span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, overflow: "hidden", background: "var(--surface-2)" }} title={`skor buzzer ${a.buzzer_score}`}>
+                  <span style={{ display: "block", height: "100%", width: `${a.buzzer_score * 100}%`, background: `var(--${tone})` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {buz.clusters.length > 0 && (
+        <div style={{ marginTop: 15 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Konten terkoordinasi <span style={{ color: "var(--faint)", fontWeight: 400 }}>· {buz.coordinated_clusters} klaster (teks identik lintas-akun)</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {buz.clusters.map((c, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, padding: "7px 10px", background: "var(--surface-2)", borderRadius: 6 }}>
+                <Pill tone="warn">{c.authors} akun · {c.posts}×</Pill>
+                <span style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }} title={c.sample ?? ""}>{c.sample ?? "—"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12, fontSize: 11, color: "var(--faint)" }}>
+        Jangkauan/follower (reach) tak diukur — butuh API platform berbayar. Ini deteksi amplifikasi perilaku (buzzer/astroturf).
+      </div>
+    </Card>
+  );
+}
+
 function EarlyWarningCard({ ew }: { ew: EarlyWarning }) {
   const cfg = {
     spike: { tone: "crit", label: "SPIKE — Potensi Krisis" },
@@ -192,6 +252,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const [ew, setEw] = useState<EarlyWarning | null>(null);
   const [asp, setAsp] = useState<AspectsResult | null>(null);
   const [sov, setSov] = useState<ShareOfVoiceResult | null>(null);
+  const [buz, setBuz] = useState<BuzzerResult | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -205,7 +266,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp, w, ap, sv] = await Promise.all([
+      const [s, n, e, rp, w, ap, sv, bz] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
@@ -213,9 +274,10 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         api.earlyWarning(selected).catch(() => null),
         api.aspects(selected).catch(() => null),
         api.shareOfVoice(selected).catch(() => null),
+        api.buzzer(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv); setBuz(bz);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); setBuz(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -248,6 +310,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
       {asp && asp.aspects.length > 0 && <AspectCard asp={asp} />}
 
       {sov && sov.brands.length >= 2 && <ShareOfVoiceCard sov={sov} />}
+
+      {buz && (buz.suspect_accounts > 0 || buz.coordinated_clusters > 0) && <BuzzerCard buz={buz} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>
