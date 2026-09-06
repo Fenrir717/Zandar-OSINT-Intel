@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type AspectsResult, type BuzzerResult, type EarlyWarning, type EntitySentiment, type Evidence, type KeywordSuggestionsResult, type Narrative, type ReputationSummary, type ShareOfVoiceResult } from "../lib/api";
+import { api, type AnalysisStats, type AspectsResult, type BuzzerResult, type EarlyWarning, type EntitySentiment, type Evidence, type KeywordSuggestionsResult, type Narrative, type ReputationSummary, type ScamResult, type ShareOfVoiceResult } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -182,6 +182,30 @@ function ShareOfVoiceCard({ sov }: { sov: ShareOfVoiceResult }) {
   );
 }
 
+function ScamCard({ scm }: { scm: ScamResult }) {
+  const scamTone = (t: string) => (t === "investasi_bodong" || t === "phishing" ? "crit" : "warn");
+  return (
+    <Card style={{ padding: 18, marginBottom: 16, borderLeft: "4px solid var(--crit)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <h3 style={{ margin: 0, fontSize: 15, color: "var(--crit)" }}>⚠ Kampanye Scam Terdeteksi <span style={{ color: "var(--faint)", fontWeight: 400, fontSize: 12 }}>· impersonasi brand</span></h3>
+        <Pill tone="crit">{scm.total_campaigns} kampanye · {scm.total_messages.toLocaleString("id")} pesan</Pill>
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--faint)", marginBottom: 12 }}>
+        Konten scam identik diulang masif dari sedikit akun — brand jadi target phishing/penipuan. Indikatif; verifikasi sebelum takedown.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {scm.campaigns.slice(0, 8).map((c, i) => (
+          <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 6 }}>
+            <Pill tone={scamTone(c.type)}>{c.label}</Pill>
+            <span className="tnum" style={{ color: "var(--faint)", fontSize: 11, whiteSpace: "nowrap" }}>{c.messages.toLocaleString("id")}× · {c.accounts} akun · {c.platform}</span>
+            <span style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }} title={c.sample}>{c.sample}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function BuzzerCard({ buz }: { buz: BuzzerResult }) {
   const scoreTone = (s: number) => (s >= 0.5 ? "crit" : s >= 0.3 ? "warn" : "muted");
   return (
@@ -334,6 +358,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const [asp, setAsp] = useState<AspectsResult | null>(null);
   const [sov, setSov] = useState<ShareOfVoiceResult | null>(null);
   const [buz, setBuz] = useState<BuzzerResult | null>(null);
+  const [scm, setScm] = useState<ScamResult | null>(null);
   const [kw, setKw] = useState<KeywordSuggestionsResult | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
@@ -348,7 +373,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp, w, ap, sv, bz, kwR] = await Promise.all([
+      const [s, n, e, rp, w, ap, sv, bz, kwR, sc] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
@@ -358,9 +383,10 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         api.shareOfVoice(selected).catch(() => null),
         api.buzzer(selected).catch(() => null),
         api.keywordSuggestions(selected).catch(() => null),
+        api.scam(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv); setBuz(bz); setKw(kwR);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); setBuz(null); setKw(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w); setAsp(ap); setSov(sv); setBuz(bz); setKw(kwR); setScm(sc);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); setAsp(null); setSov(null); setBuz(null); setKw(null); setScm(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -387,6 +413,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
       </div>
 
       {ew && (ew.level !== "calm" || ew.total_negative > 0) && <EarlyWarningCard ew={ew} />}
+
+      {scm && scm.total_campaigns > 0 && <ScamCard scm={scm} />}
 
       {rep && rep.total > 0 && rep.reputation_index != null && <ReputationCard rep={rep} />}
 

@@ -19,6 +19,28 @@ _TYPE_MAP = {
 _MIN_SCORE = 0.75
 _MAX_CHARS = 512
 
+# Kata percakapan/sapaan/singkatan yang sering salah diekstrak NER sebagai "entitas"
+# (riset: ~22% entitas junk — "kak kalo", "hallo min", "bang kal", "gk", "tf").
+_JUNK_WORDS = frozenset({
+    "kak", "min", "bang", "bg", "gan", "sis", "sy", "gua", "gue", "aku", "kamu",
+    "halo", "hallo", "kalo", "kalau", "gk", "ga", "gak", "tf", "yg", "dm", "pm",
+    "kah", "sih", "dong", "deh", "tolong", "mohon", "maaf", "silahkan", "silakan",
+    "permisi", "hai", "selamat", "pak", "bu", "mbak", "mas", "om", "tante", "kal",
+})
+
+
+def _is_junk(name: str) -> bool:
+    """True bila nama entitas = fragmen percakapan/singkatan, bukan entitas nyata."""
+    n = name.lower().strip()
+    if len(n.replace(" ", "")) <= 2:            # singkatan pendek: gk, tf, bg
+        return True
+    toks = n.split()
+    if toks and all(t in _JUNK_WORDS for t in toks):   # semua token = filler
+        return True
+    if len(toks) <= 2 and any(t in _JUNK_WORDS for t in toks):  # frasa pendek ber-filler
+        return True
+    return False
+
 
 @dataclass
 class Entity:
@@ -73,7 +95,7 @@ class NerExtractor:
                 typ = _TYPE_MAP.get(str(e.get("entity_group", "")).upper())
                 name = (e.get("word") or "").replace("##", "").strip()
                 score = float(e.get("score", 0.0))
-                if not typ or len(name) < 2 or score < _MIN_SCORE:
+                if not typ or len(name) < 2 or score < _MIN_SCORE or _is_junk(name):
                     continue
                 key = f"{typ}:{normalize(name)}"
                 if key not in seen or score > seen[key].score:

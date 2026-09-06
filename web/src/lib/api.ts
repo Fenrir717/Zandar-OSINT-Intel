@@ -152,6 +152,13 @@ export interface BuzzerResult {
   total_accounts: number; suspect_accounts: number; coordinated_clusters: number;
   caveats: string[];
 }
+export interface ScamCampaign {
+  type: string; label: string; labels: string[]; messages: number; accounts: number;
+  platform: string | null; sample: string;
+}
+export interface ScamResult {
+  campaigns: ScamCampaign[]; total_campaigns: number; total_messages: number; caveats: string[];
+}
 export interface KeywordSuggestion {
   keyword: string; kind: string; count: number; score: number;
 }
@@ -329,6 +336,7 @@ export const api = {
   aspects: (inv: string) => req<AspectsResult>(`/analysis/${inv}/aspects`),
   shareOfVoice: (inv: string, top = 10) => req<ShareOfVoiceResult>(`/analysis/${inv}/share-of-voice?top=${top}`),
   buzzer: (inv: string, top = 12) => req<BuzzerResult>(`/analysis/${inv}/buzzer?top=${top}`),
+  scam: (inv: string) => req<ScamResult>(`/analysis/${inv}/scam`),
   keywordSuggestions: (inv: string, top = 15) => req<KeywordSuggestionsResult>(`/analysis/${inv}/keyword-suggestions?top=${top}`),
   expandScan: (inv: string, keywords: string[], auto_pipeline = true) =>
     req<{ dispatched: number; keywords: string[]; auto_pipeline: boolean }>(`/analysis/${inv}/expand-scan`, {

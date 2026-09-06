@@ -161,6 +161,22 @@ async def buzzer(
     return score_accounts(items, top=top)
 
 
+@router.get("/{investigation_id}/scam")
+async def scam(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> dict:
+    """Deteksi kampanye SCAM/spam ter-label (investasi bodong / admin palsu / lure
+    Telegram / phishing) dari klaster konten identik-masif. Ubah data-cacat jadi intel."""
+    from core.scam import detect_scam
+
+    rows = (await session.execute(
+        select(Comment.author_hash, Comment.dedup_hash, Comment.content, Comment.platform)
+        .where(Comment.investigation_id == investigation_id)
+    )).all()
+    items = [{"author": a, "dup": d, "content": c, "platform": p} for (a, d, c, p) in rows]
+    return detect_scam(items)
+
+
 @router.get("/{investigation_id}/keyword-suggestions")
 async def keyword_suggestions(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, top: int = 15
