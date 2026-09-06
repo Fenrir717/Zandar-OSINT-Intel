@@ -28,11 +28,30 @@ async def run_analysis(
     )
     await session.commit()
 
-    from workers.tasks import classify_investigation
-
     from api.util import enqueue
+    from workers.tasks import classify_investigation
     task = enqueue(classify_investigation, str(investigation_id))
     return AnalyzeAccepted(task_id=task.id, status="queued")
+
+
+@router.get("/{investigation_id}/reputation")
+async def reputation(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser
+) -> dict:
+    """Skor reputasi agregat: rating bintang review (playstore/appstore) + sentimen
+    teks classifier → indeks 0-100, distribusi bintang, rincian per-platform."""
+    from core.reputation import aggregate_reputation
+
+    rows = (await session.execute(
+        select(Comment.platform, Comment.rating, Analysis.sentiment, Analysis.sentiment_score)
+        .outerjoin(Analysis, Analysis.comment_id == Comment.id)
+        .where(Comment.investigation_id == investigation_id)
+    )).all()
+    items = [
+        {"platform": p, "rating": rt, "sentiment": s, "sentiment_score": ss}
+        for (p, rt, s, ss) in rows
+    ]
+    return aggregate_reputation(items)
 
 
 @router.get("/{investigation_id}/stats")

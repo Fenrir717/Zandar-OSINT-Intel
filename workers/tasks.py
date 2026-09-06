@@ -38,6 +38,12 @@ def collect_source(self, collection_id: str, run_id: str) -> dict:
     return asyncio.run(_collect(collection_id, run_id))
 
 
+def _review_rating(raw: dict | None) -> int | None:
+    """Ambil bintang 1-5 dari payload review (raw.score) bila valid; else None."""
+    v = (raw or {}).get("score")
+    return v if isinstance(v, int) and 1 <= v <= 5 else None
+
+
 async def _collect(collection_id: str, run_id: str) -> dict:
     async with worker_session() as session:
         run = await session.get(CollectionRun, uuid.UUID(run_id))
@@ -85,6 +91,7 @@ async def _collect(collection_id: str, run_id: str) -> dict:
                         platform=item.platform,
                         external_id=item.external_id,
                         url=item.url,
+                        rating=_review_rating(item.raw),  # bintang review (playstore/appstore)
                         raw_ref=raw_ref,
                         published_at=item.published_at,
                         **fields,

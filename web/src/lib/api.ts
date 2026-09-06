@@ -117,6 +117,14 @@ export interface AnalysisStats {
   bot_suspect: number; avg_confidence: number | null; sarcasm: number; low_confidence: number;
   sentiment_trend: { day: string; avg: number; count: number }[];
 }
+export interface ReputationSummary {
+  total: number; rated_count: number; avg_rating: number | null;
+  star_distribution: Record<string, number>;
+  avg_sentiment_score: number | null; sentiment_counts: Record<string, number>;
+  reputation_index: number | null; index_basis: string;
+  by_platform: Record<string, { count: number; avg_rating: number | null; rated: number }>;
+  caveats: string[];
+}
 export interface ReportMeta {
   id: string; title: string; status: string; classification: string;
   created_at: string | null; generated_by_run: string | null;
@@ -277,6 +285,7 @@ export const api = {
   narratives: (inv: string) => req<Narrative[]>(`/investigations/${inv}/narratives`),
   narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
+  reputation: (inv: string) => req<ReputationSummary>(`/analysis/${inv}/reputation`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {

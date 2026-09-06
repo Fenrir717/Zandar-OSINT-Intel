@@ -164,6 +164,7 @@ class Comment(Base):
     author_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # pseudonim (HMAC) — UU PDP
     content: Mapped[str] = mapped_column(Text, nullable=False)
     lang: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # bintang review 1-5 (playstore/appstore)
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_ref: Mapped[str | None] = mapped_column(Text, nullable=True)  # pointer objek MinIO
     dedup_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

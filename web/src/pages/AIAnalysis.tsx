@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative } from "../lib/api";
+import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -19,9 +19,56 @@ function arr(d: Record<string, number> | undefined) {
   return Object.entries(d || {}).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 }
 
+function ReputationCard({ rep }: { rep: ReputationSummary }) {
+  const idx = rep.reputation_index ?? 0;
+  const tone = idx >= 66 ? "ok" : idx >= 40 ? "warn" : "crit";
+  const color = `var(--${tone})`;
+  const label = idx >= 66 ? "Baik" : idx >= 40 ? "Sedang" : "Buruk";
+  const maxStar = Math.max(1, ...Object.values(rep.star_distribution));
+  const rated = Object.entries(rep.by_platform).filter(([, v]) => v.rated > 0);
+  return (
+    <Card style={{ padding: 18, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ textAlign: "center", minWidth: 128 }}>
+          <div style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".07em" }}>Indeks Reputasi</div>
+          <div className="tnum" style={{ fontSize: 46, fontWeight: 800, color, lineHeight: 1.1, letterSpacing: "-.02em" }}>
+            {idx.toFixed(0)}<span style={{ fontSize: 17, color: "var(--faint)", fontWeight: 700 }}>/100</span>
+          </div>
+          <Pill tone={tone}>{label}</Pill>
+        </div>
+        <div style={{ minWidth: 132 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>Rerata bintang</div>
+          <div className="tnum" style={{ fontSize: 26, fontWeight: 800, marginTop: 2 }}>
+            {rep.avg_rating != null ? <>{rep.avg_rating.toFixed(1)} <span style={{ color: "var(--warn)" }}>★</span></> : "–"}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--faint)" }}>{rep.rated_count.toLocaleString("id")} review ber-rating</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 190 }}>
+          {[5, 4, 3, 2, 1].map((s) => {
+            const c = rep.star_distribution[String(s)] || 0;
+            return (
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, margin: "2.5px 0" }}>
+                <span style={{ width: 20, color: "var(--muted)" }}>{s}★</span>
+                <div style={{ flex: 1, height: 8, background: "var(--surface-2)", borderRadius: 4, overflow: "hidden" }}>
+                  <span style={{ display: "block", width: `${Math.round((c / maxStar) * 100)}%`, height: "100%", background: s >= 4 ? "var(--ok)" : s === 3 ? "var(--warn)" : "var(--crit)" }} />
+                </div>
+                <span className="tnum" style={{ width: 42, textAlign: "right", color: "var(--faint)" }}>{c.toLocaleString("id")}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ marginTop: 11, paddingTop: 10, borderTop: "1px solid var(--line)", fontSize: 11, color: "var(--faint)" }}>
+        Dasar: {rep.index_basis}. Rating: {rated.length ? rated.map(([k, v]) => `${k} ${v.avg_rating?.toFixed(1)}★`).join(" · ") : "belum ada review — indeks dari sentimen teks"}.
+      </div>
+    </Card>
+  );
+}
+
 export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode) => void }) {
   const { list, selected, choose } = useInvestigations();
   const [stats, setStats] = useState<AnalysisStats | null>(null);
+  const [rep, setRep] = useState<ReputationSummary | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,13 +82,14 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e] = await Promise.all([
+      const [s, n, e, rp] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
+        api.reputation(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e);
-    } catch { setStats(null); setNars([]); setEnts([]); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -66,6 +114,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <Button variant="ghost" icon="refresh" onClick={load}>Segarkan</Button>
         <Button icon="spark" onClick={run} disabled={busy}>{busy ? "Menjalankan…" : "Jalankan Analisis"}</Button>
       </div>
+
+      {rep && rep.total > 0 && rep.reputation_index != null && <ReputationCard rep={rep} />}
 
       <div className="grid-stats-6" style={{ marginBottom: 16 }}>
         <div className="rise rise-1"><Tile label="Total komentar" value={stats ? stats.total.toLocaleString("id") : "–"} icon="comment" /></div>
