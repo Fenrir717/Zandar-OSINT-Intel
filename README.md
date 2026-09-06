@@ -1,77 +1,236 @@
 # Zandar OSINT Intel
 
-Platform OSINT analisis sentimen & forensik narasi berbahasa Indonesia.
-Backend FastAPI · orkestrasi LangGraph · Qdrant (vector) · Neo4j (knowledge graph) ·
-PostgreSQL (sumber kebenaran) · Celery/Redis (koleksi) · MinIO (raw data lake).
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.0-1C3C3C)
+![Qdrant](https://img.shields.io/badge/Qdrant-vector-DC244C)
+![Neo4j](https://img.shields.io/badge/Neo4j-graph-4581C3?logo=neo4j&logoColor=white)
+![Status](https://img.shields.io/badge/status-aktif%20dikembangkan-orange)
 
-Prinsip arsitektur (PRD §6): **LangGraph berpikir, Celery bekerja, model lokal
-mengklasifikasi, database mengingat.**
+Platform **OSINT analisis sentimen & forensik narasi** berbahasa Indonesia — dari
+satu kata kunci, agen memilih sumber, mengumpulkan wacana publik, mengklasifikasi,
+mengelompokkan jadi narasi, memetakan entitas, dan memverifikasi klaim terhadap
+sumber resmi. Ditambah pilar **Riset Pasar Geospasial** untuk analisis lokasi bisnis.
 
-## Status: Fase 5 — Verifikasi Klaim (fase inti 0–5 selesai)
+> Prinsip arsitektur (PRD §6): **LangGraph berpikir, Celery bekerja, model lokal
+> mengklasifikasi, database mengingat.** LLM dipakai untuk *penalaran agregat*
+> (memilih sumber, melabeli narasi, menulis laporan) — **bukan** per-item.
 
-| Fase | Isi | Status |
-|------|-----|--------|
-| 0 | Monorepo, docker-compose, FastAPI + JWT/RBAC, Alembic, CI | ✅ |
-| 1 | 11 adapter koleksi, enrichment deterministik, worker+beat, Comment Explorer | ✅ |
-| 2 | IndoBERT/Flash-LLM, Qdrant, LangGraph Graph A & C | ✅ |
-| 3 | Neo4j, deteksi CIB, forensik narasi (kuadran) | ✅ |
-| 4 | Graph D (laporan ber-sitasi), hardening | ✅ |
-| 5 | Graph E (verifikasi klaim vs ground-truth resmi BPS/BMKG) | ✅ ini |
+### Sekilas: apa yang benar-benar jalan vs butuh konfigurasi
 
-## Adapter koleksi (11 platform, 3 tier akses)
+Dokumen ini **tidak melebih-lebihkan**. Penanda status dipakai konsisten:
+✅ jalan tanpa setup · 🔑 butuh kredensial · 🔗 butuh URL/target · 🧪 stub/menyusul.
 
-Adapter berbagi satu kontrak (`collect(query) → RawItem[]`) dan mendeklarasikan
-metadata akses yang dibaca UI, planner, dan estimasi biaya — cek via
-`GET /api/v1/sources/adapters`.
+---
 
-| Tier | Platform | Jalur akses | Catatan |
-|------|----------|-------------|---------|
-| **free** | `rss` | Feed RSS/Atom | Ringkasan dari feed |
-| | `news` | GDELT DOC 2.0 → trafilatura | Gratis tanpa key, 65 bahasa; teks penuh |
-| | `blog` | Autodiscovery feed → trafilatura | Teks penuh tiap tulisan |
-| | `website` | sitemap.xml / URL → trafilatura | Crawl terbatas, hormat robots.txt |
-| | `forum` | Discourse JSON publik | Non-Discourse pakai `website` |
-| | `github` | REST API resmi | 5rb req/jam; search 30 req/menit |
-| | `youtube` | Data API v3 | Kuota 10rb unit/hari |
-| | `reddit` | JSON publik | Komersial butuh kontrak Reddit |
-| | `telegram` | MTProto (menyusul) | Butuh sesi Telethon |
-| **metered** | `x` | API v2 pay-per-use | ~$0,005/post; **cost guard wajib** |
-| **vendor** | `tiktok` | Penyedia data berkontrak | Tak ada akses komersial resmi |
+## Yang dilakukan platform (4 pilar)
 
-`news`, `blog`, `website` (dan fallback `rss`) berbagi modul ekstraksi
-[`web_extract.py`](workers/adapters/web_extract.py) — mereka berbeda hanya pada
-cara **menemukan** URL, bukan cara mengambil teks.
+| Pilar | Ringkas | Status |
+|---|---|---|
+| **Forensik narasi & sentimen** | koleksi → klasifikasi IndoBERT → klaster narasi (Graph C) → kuadran otentisitas×kebenaran, deteksi CIB | ✅ |
+| **Scan Commander (autonomous loop)** | 1 keyword → agen pilih sumber → koleksi → analisis penuh **otomatis** | ✅ |
+| **Verifikasi klaim** | klaim narasi diadu ke ground-truth resmi **BPS/BMKG** (Graph E, gaya AVeriTeC) | ✅ |
+| **Riset Pasar Geospasial** | kategori + lokasi → peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap) | ✅ |
 
-### Metode koleksi alternatif (murah, tanpa akun tumbal/rotasi IP)
+---
 
-Kunci registry = **metode** koleksi; bisa berbeda dari label data `platform`. Satu
-platform bisa punya beberapa jalur (mis. X: resmi vs vendor vs nitter).
+## Arsitektur
 
-| Metode (key) | Platform data | Tier | Catatan |
+```mermaid
+flowchart LR
+  subgraph SRC["Sumber (adapter koleksi)"]
+    direction TB
+    A1["rss / news ✅"]:::ok
+    A2["youtube ✅ 🔑"]:::ok
+    A3["reddit ✅"]:::ok
+    A4["website 🔗"]:::need
+    A5["telegram 🧪"]:::stub
+  end
+
+  SRC -->|"collect → RawItem"| CEL["Celery + Redis<br/>queue: default, collect"]
+  CEL --> PG[("PostgreSQL<br/>sumber kebenaran")]
+  CEL --> LAKE[("MinIO<br/>raw data lake")]
+
+  PG --> CLS["IndoBERT<br/>sentimen · emosi · toksisitas"]
+  CLS --> EMB["e5-small<br/>embedding"]
+  EMB --> QD[("Qdrant<br/>vektor")]
+  CLS --> NEO[("Neo4j<br/>knowledge graph")]
+
+  QD --> GC["Graph C<br/>narasi + risiko"]
+  NEO --> GC
+  GC --> GD["Graph D<br/>laporan ber-sitasi"]
+  GC --> GE["Graph E<br/>verifikasi klaim"]
+  BPS["BPS / BMKG<br/>ground-truth"] --> GE
+
+  API["FastAPI<br/>JWT · RBAC"] <--> WEB["React SPA"]
+  API -.-> CEL & PG & QD & NEO & GC
+
+  classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d;
+  classDef need fill:#fef9c3,stroke:#ca8a04,color:#713f12;
+  classDef stub fill:#fee2e2,stroke:#dc2626,color:#7f1d1d;
+```
+
+---
+
+## Agen (LangGraph): Commander → Narrator → Reporter → Verifier
+
+Pipeline analisis = empat graph LangGraph. Framing "agent": *Commander* merencanakan,
+sisanya mengeksekusi. LLM hanya di simpul penalaran (Tier R reasoning / F flash);
+klaster & skoring = kode deterministik.
+
+| Graph | Peran | LLM? | Keluaran |
 |---|---|---|---|
-| `x_vendor` | x | vendor | Shadow API komunitas (~$0,15-0,40/1k tweet). Vendor menanggung ToS; kita klien API. |
-| `har` | (per-config) | free | Parse file `.har` yang diekspor analis manual dari browser. Human-in-the-loop, menutup **Threads** tanpa API. |
-| `youtube_transcript` | youtube | free | Closed captions publik (tanpa kuota Data API) — isi video untuk analisis. |
-| `wayback` | wayback | free | Konten historis dari arsip Archive.org (artikel dihapus, evolusi narasi). |
-| `nitter` | x | free | Front-end publik X — **mayoritas instance mati sejak 2024**; butuh `base_url` hidup. |
+| **A · Commander/Planner** | parse intent → perluas keyword → pilih sumber → estimasi biaya → approval | R+F | rencana koleksi |
+| **C · Narrator** | klaster vektor (leader-clustering) → labeli narasi → skor risiko (ABCD) | F | narasi + kuadran |
+| **D · Reporter** | narasi + bukti → laporan ber-sitasi (bahasa awam, band kualitatif) | R | laporan MinIO |
+| **E · Verifier** | ekstrak klaim → adu ke bukti internal + BPS/BMKG → verdict (AVeriTeC) | F | verdict + veracity |
 
-**Prinsip:** kita TIDAK menjalankan akun tumbal, rotasi token/IP, atau bypass
-bot-detection — itu mencemari cerita kepatuhan (§ UU PDP) dan membuat lalu lintas
-kita menyerupai CIB yang justru kita deteksi. Jalur murah = tier `vendor` + arsip
-publik + import manual, bukan scraping gerilya.
+---
+
+## Scan Commander — autonomous loop
+
+Ganti alur manual "buat koleksi satu per satu" dengan **satu tombol**: ketik topik,
+agen urus sisanya sampai investigasi terisi penuh dan teranalisis.
+
+```mermaid
+flowchart TD
+  KW["🔍 Keyword / topik"] --> CMD["Commander · Graph A<br/>parse · perluas keyword · pilih sumber"]
+  CMD --> REC["Agen Recon<br/>DuckDuckGo + benih LLM → URL target"]
+  REC --> REV{"Tinjau cepat<br/>sumber + estimasi"}
+  REV -->|"Setujui"| DISP["Dispatch koleksi paralel<br/>Celery chord"]
+  DISP --> LOOP["⚙️ Autonomous loop · chord callback<br/>classify → embed → narasi → knowledge graph"]
+  LOOP --> OUT["Forensik Narasi · Reports · Verifikasi Klaim"]
+```
+
+- **Chord**: koleksi didispatch sebagai grup; begitu **semua** selesai, callback
+  menjalankan rantai analisis penuh. `collect_source` tak pernah melempar (semua
+  error ditangkap → dict), jadi callback dijamin jalan walau sebagian sumber gagal.
+- **Agen Recon** (`graphs/recon.py`): menemukan URL target otomatis (DuckDuckGo HTML
+  gratis + situs benih dari LLM) → mengisi adapter `website`, sehingga sumber
+  berbasis-URL ikut terkumpul **tanpa** analis mengetik URL. Tidak men-scrape Google
+  langsung (diblokir + langgar ToS).
+
+Terbukti end-to-end pada topik nyata "bisnis laundry": 5 sumber → ~1.040 item
+(youtube 922 via pencarian keyword, news 100, website 18 via Recon) → 13+ narasi.
+
+---
+
+## Riset Pasar Geospasial
+
+Pilar general-purpose (bukan hanya laundry): **kategori bisnis + lokasi** → analisis
+kelayakan lokasi dari **OpenStreetMap** (gratis, tanpa API key).
+
+```mermaid
+flowchart LR
+  IN["Kategori + Lokasi + Radius"] --> GEO["Nominatim<br/>geocode → titik + bbox"]
+  GEO --> OVP["Overpass API<br/>kompetitor + POI permintaan"]
+  OVP --> AN["Analisis geospasial<br/>jarak NN · densitas · Clark-Evans<br/>radius aman · skor sub-zona"]
+  AN --> MAP["Peta SVG + kartu jawaban"]
+  MAP --> EXP["Ekspor: HTML · PDF<br/>Chromium headless, link klik-able"]
+```
+
+Menjawab 3 pertanyaan lokasi: **jarak aman antar-kompetitor**, **radius aman**
+(estimasi berbasis densitas), **sub-zona paling efektif** (permintaan ÷ kompetitor).
+8 kategori siap pakai (`laundry, cafe, resto, minimarket, apotek, salon, bengkel, gym`)
+di `geo/catalog.py` — tambah kategori = tambah entri, engine tak berubah.
+
+> **Catatan jujur:** cakupan OSM di Indonesia = **batas bawah** (usaha kecil/informal
+> sering belum terpetakan). Angka kompetitor adalah minimum, bukan sensus — hasil
+> selalu menyertakan caveat ini. Untuk presisi, langkah berikut = Google Places (berbayar).
+
+---
+
+## Adapter koleksi (18 metode, 3 tier)
+
+Semua adapter berbagi kontrak `collect(query) → RawItem[]` dan mendeklarasikan metadata
+akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters`.
+
+| Adapter | Tier | Kapabilitas | Catatan |
+|---|---|---|---|
+| `rss` | free | ✅ keyword | `feeds` kosong → **Google News RSS** dari keyword otomatis |
+| `news` | free | ✅ keyword | GDELT DOC 2.0; fallback Google News bila GDELT keblok |
+| `reddit` | free | ✅ keyword | `search.json` publik; tanpa subreddit → pencarian global |
+| `youtube` | free | ✅ keyword 🔑 | Data API; tanpa `video_ids` → **search.list** dari keyword → komentar |
+| `website` | free | 🔗 URL | web_extract (hormat robots.txt); **diisi otomatis oleh agen Recon** |
+| `blog` | free | 🔗 URL | autodiscovery feed → teks penuh |
+| `forum` | free | 🔗 URL | Discourse JSON; tanpa `base_url` → fail-soft (0, bukan error) |
+| `wayback` | free | ✅ | arsip Archive.org — konten dihapus, evolusi narasi |
+| `youtube_transcript` | free | 🔑 | closed caption publik (tanpa kuota Data API) |
+| `har` | free | ✅ | parse `.har` ekspor manual analis (human-in-the-loop) |
+| `github` | free | 🔑 | REST resmi (butuh token) |
+| `telegram` | free | 🧪 🔑 | MTProto/Telethon — **stub, menyusul** (butuh `api_id/api_hash`) |
+| `nitter` | free | 🔗 | front-end X publik — mayoritas instance mati sejak 2024 |
+| `x` | metered | 🔑 | API v2 pay-per-use (~$0,005/post) — **cost guard wajib** |
+| `x_vendor`, `tiktok` | vendor | 🔑 | shadow API / penyedia data berkontrak |
+| `bps`, `bmkg` | free | ✅ | **ground-truth resmi** (statistik, gempa) — untuk verifikasi, bukan wacana |
+| `ckan` (satudata) | free | 🔗 | portal data terbuka daerah (butuh `base_url`) |
+
+**Prinsip kepatuhan:** TIDAK ada akun tumbal, rotasi token/IP, atau bypass
+bot-detection — itu mencemari kepatuhan (UU PDP) dan membuat lalu lintas kita
+menyerupai CIB yang justru kita deteksi. Jalur murah = arsip publik + vendor +
+import manual + pencarian resmi, **bukan** scraping gerilya.
+
+---
+
+## Klasifikasi lokal (IndoBERT) — tervalidasi gold set
+
+Baseline `lexicon` (default) jalan tanpa dependensi. Jalur produksi = **IndoBERT
+hibrida** (RoBERTa fine-tuned Indonesia untuk sentimen + leksikon untuk intent):
+
+```bash
+pip install -e ".[ml]"          # torch + transformers (~2.5GB)
+# .env:
+CLASSIFIER_PROVIDER=indobert
+```
+
+Divalidasi terhadap gold set berlabel manusia (tanpa pelabelan manual kita):
+
+| Tugas | Model | Gold set | F1 |
+|---|---|---|---|
+| Sentimen | IndoBERT | NusaX-Senti | **0.894** ✅ (gate ≥0.82) |
+| Toksisitas | dehatebert | Ibrohim & Budi 2019 | **0.865** ✅ |
+| Emosi | StevenLimcorn/emotion | IndoNLU EmoT | **0.717** (SOTA 5-kelas) |
+| — | lexicon (baseline) | NusaX-Senti | 0.541 (sengaja baseline) |
+
+Teks panjang (artikel penuh) dipotong ke ~1.500 char sebelum RoBERTa (batas 512 token).
+CPU ~22 komentar/dtk (100rb ≈ 75 mnt); GPU CUDA 5–10× lebih cepat. Cache Redis
+menghindari klasifikasi ulang teks identik. `refine` sarkasme (LLM per-item, low-conf
+saja) — **catatan skala:** untuk ratusan ribu+ item, jadikan sampling.
+
+---
+
+## LLM: Bedrock multi-model + fallback
+
+Provider LLM abstrak (Tier R reasoning / F flash). Konfigurasi via `LLM_PROVIDER`.
+`bedrock` memakai **satu bearer token** Amazon Bedrock (Converse API) dengan **rantai
+fallback** — model non-Anthropic diutamakan (murah), Claude opsi terakhir:
+
+```
+BEDROCK_MODEL_R=qwen3-235b → amazon.nova-pro → anthropic.claude-sonnet   (reasoning)
+BEDROCK_MODEL_F=deepseek-v3 → amazon.nova-micro → anthropic.claude-haiku (flash)
+```
+
+Provider lain didukung: `stub` (default, tanpa biaya), OpenAI-compat
+(OpenRouter/Groq/Gemini/Cerebras). `data_policy=local_only` pada investigasi memaksa
+klasifikasi model lokal — konten tak dikirim ke API pihak ketiga.
+
+---
 
 ## Struktur
 
 ```
-core/      # config, db, security, model SQLAlchemy (ERD PRD §8.1 + §10.6)
-api/       # FastAPI — auth JWT + RBAC, investigations CRUD
-workers/   # Celery — job koleksi & enrichment (stub di Fase 0)
-graphs/    # LangGraph A/C/D/E (mulai Fase 2 — lihat graphs/README.md)
-web/       # frontend React (mulai Fase 1)
-alembic/   # migrasi database
-scripts/   # utilitas (create_admin)
-tests/     # smoke test (tanpa servis eksternal)
+core/      # config, db (async SQLAlchemy 2.0), security JWT/RBAC, model
+api/       # FastAPI — auth, investigations, collections, analysis, market, planner ...
+workers/   # Celery — adapter koleksi, enrichment, klasifikasi, autonomous loop
+  adapters/#   18 metode koleksi (kontrak collect→RawItem)
+  classify/#   IndoBERT + leksikon + preprocess + refine + cache
+graphs/    # LangGraph A/C/D/E + recon (agen target discovery) + runner + llm
+geo/       # Riset Pasar Geospasial (OSM/Overpass, analisis, laporan HTML/PDF)
+web/       # frontend React (Vite) — Scan, Riset Pasar, Forensik, Reports ...
+alembic/   # migrasi database    ·    scripts/ utilitas    ·    tests/ smoke
 ```
+
+---
 
 ## Quickstart
 
@@ -79,157 +238,65 @@ Prasyarat: Python 3.11+, Docker Desktop.
 
 ```bash
 # 1. Konfigurasi
-cp .env.example .env        # lalu ganti JWT_SECRET
+cp .env.example .env        # ganti JWT_SECRET; isi LLM_PROVIDER bila pakai Bedrock
 
 # 2. Infrastruktur (PostgreSQL, Redis, Qdrant, Neo4j, MinIO)
 docker compose up -d
 
-# 3. Dependensi Python
+# 3. Dependensi
 python -m venv .venv
 .venv\Scripts\activate      # Windows  (Linux/Mac: source .venv/bin/activate)
 pip install -e ".[dev]"
 
-# 4. Migrasi skema
+# 4. Migrasi + user admin
 alembic upgrade head
-
-# 5. User admin pertama
 python scripts/create_admin.py --email admin@zandar.local --password gantipassword
 
-# 6. Jalankan API
+# 5. API + worker + frontend
 uvicorn api.main:app --reload
+celery -A workers.celery_app worker --loglevel=info --pool=threads -Q default,collect
+cd web && npm install && npm run dev
 ```
 
-Frontend (React SPA, di-build ke `web/dist`, disajikan API): **http://localhost:8000/**
-Dev frontend: `cd web && npm install && npm run dev` (Vite :5173, proxy ke API).
-Swagger UI: http://localhost:8000/docs
+Frontend dev: Vite (proxy ke API) · Swagger UI: `/docs` · Neo4j `:7475` ·
+MinIO Console `:9003` · Qdrant `:6335/dashboard`.
 
-Servis (port terisolasi, lihat Catatan Windows): Neo4j http://localhost:7475 ·
-MinIO Console http://localhost:9003 · Qdrant http://localhost:6335/dashboard
+Ekspor PDF (Riset Pasar & agen Recon) memakai **Chromium headless** — Chrome/Edge di
+host (di Windows, Edge selalu ada). Deploy Linux: lihat [`docs/pdf-export.md`](docs/pdf-export.md).
 
-### Worker & scheduler (koleksi terjadwal)
-
-Worker menjalankan job koleksi; beat memicu koleksi ber-`schedule_cron` (tiap 60 dtk
-mengecek collection yang jatuh tempo). Di Windows pakai skrip berikut (sudah memakai
-`--pool=threads` yang wajib):
-
-```bash
-powershell -File scripts/run_worker.ps1
-powershell -File scripts/run_beat.ps1
-```
-
-Non-Windows setara:
-
-```bash
-celery -A workers.celery_app worker --loglevel=info -Q default,collect
-celery -A workers.celery_app beat --loglevel=info
-```
-
-## Uji gate Fase 0
-
-Login → buat investigasi → baris masuk DB:
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/auth/login -d "username=admin@zandar.local&password=gantipassword" -H "Content-Type: application/x-www-form-urlencoded"
-```
-
-Pakai `access_token` dari respons:
-
-```bash
-curl -s -X POST http://localhost:8000/api/v1/investigations -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" -d "{\"title\": \"Investigasi pertama\", \"priority\": \"high\"}"
-```
-
-Test & lint lokal:
-
-```bash
-pytest -q
-ruff check .
-```
+---
 
 ## Catatan Windows (penting)
 
-Divalidasi di Windows 11 + Docker Desktop. Beberapa penyesuaian yang sudah diterapkan:
+Divalidasi di Windows 11 + Docker Desktop:
 
 - **Port digeser ke rentang terisolasi** (`5433/6380/6335-6336/7475/7688/9002-9003`)
-  agar tidak bentrok dengan stack lain di WSL/host. Lihat `docker-compose.yml`.
-- **Gunakan `127.0.0.1`, bukan `localhost`, di `.env`.** Pada Windows, `localhost`
-  dapat resolve ke IPv6/WSL lebih dulu dan membuat koneksi MinIO hang ~21 detik
-  per permintaan. `.env.example` sudah memakai `127.0.0.1`.
-- **Celery worker native belum stabil di Windows + Python 3.14** (consumer solo-pool
-  menggantung sebelum `ready`). Pipeline koleksi sudah terbukti benar bila dipicu
-  langsung; untuk worker terjadwal, jalankan worker di dalam WSL atau Python 3.12.
-  Ini item terbuka Fase 1, bukan cacat pipeline.
+  agar tidak bentrok stack lain. Lihat `docker-compose.yml`.
+- **Pakai `127.0.0.1`, bukan `localhost`** di `.env` (localhost bisa resolve ke
+  IPv6/WSL → MinIO hang ~21 dtk/permintaan).
+- **Celery worker WAJIB `--pool=threads`** (solo/prefork menggantung di Windows).
 
-## Klasifikasi lokal IndoBERT (opsional, Fase 2)
+---
 
-Baseline `lexicon` (default) jalan tanpa dependensi. Untuk classifier kontekstual
-IndoBERT (menangkap nuansa yang leksikon lewatkan, mis. "ekonomi rapuh"→negatif):
+## Batasan & skala (jujur)
 
-```bash
-pip install -e ".[ml]"          # torch + transformers (~2.5GB)
-# lalu di .env:
-CLASSIFIER_PROVIDER=indobert
+- **Sumber gratis punya plafon.** Google News ~100/feed, YouTube kuota 10rb unit/hari,
+  Reddit ID tipis. Untuk **jutaan** item lintas medsos → butuh firehose berbayar
+  (X Enterprise, social-listening). "Jutaan" biasanya dicapai lewat **akumulasi
+  koleksi terjadwal** seiring waktu, bukan sekali sedot.
+- **Telegram & Common Crawl** = lever volume besar tapi **belum dibangun** (Telegram
+  stub; Common Crawl butuh adapter + infra big-data).
+- **Klaster narasi** memuat vektor ke memori (leader-clustering, bukan O(n²)) + LLM
+  label dibatasi 25 cluster teratas — memadai puluhan ribu; untuk 100rb+ perlu
+  klaster minibatch + refine sampling + inference GPU/ONNX.
+- **GDELT** bisa terblokir di sebagian jaringan lokal → adapter `news` fallback ke
+  Google News RSS otomatis.
+
+---
+
+## Kepatuhan
+
+Identitas penulis komentar disimpan sebagai `author_hash` (pseudonim) sejak ingestion.
+`data_policy=local_only` memaksa klasifikasi model lokal — konten tak dikirim ke pihak
+ketiga. Raw payload immutable di MinIO (replay bila model membaik). Detail: PRD §12–13.
 ```
-
-Provider `indobert` bersifat HIBRIDA: RoBERTa fine-tuned Indonesia untuk sentimen +
-leksikon untuk emosi/intent/toksisitas. Model diunduh sekali dari HuggingFace (~500MB).
-
-**CPU vs GPU:** `pip install torch` default di Windows = CPU-only (~22 komentar/dtk;
-100rb komentar ≈ 75 menit). Untuk GPU (RTX 3050, ~5-10× lebih cepat), pasang build CUDA:
-
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu121 --force-reinstall
-```
-
-Bandingkan provider pada data nyata (kesepakatan):
-
-```bash
-python scripts/classifier_compare.py --a lexicon --b indobert --limit 300
-```
-
-### Evaluasi akurasi terhadap gold set (bake-off, PRD §7.4)
-
-Gold set = **NusaX-Senti** (sentimen Indonesia berlabel manusia, IndoNLP) — diunduh
-otomatis dari GitHub, tanpa pelabelan manual. Gate: F1 makro sentimen ≥ 0.82.
-
-```bash
-python scripts/eval_classifier.py --provider lexicon indobert
-```
-
-Hasil terukur (NusaX test, 400 kalimat): **IndoBERT macro-F1 0.894 (LULUS)** vs
-**lexicon 0.541 (gagal)**. Leksikon = baseline agar backend jalan; IndoBERT = jalur
-produksi tervalidasi. Bahasa daerah lebih rendah (Jawa 0.758, Sunda 0.753) — model
-Indonesia-sentris.
-
-Emosi juga tervalidasi terhadap **IndoNLU EmoT** (tweet):
-
-```bash
-python scripts/eval_classifier.py --task emotion --provider indobert
-```
-
-Model emosi default `StevenLimcorn/...emotion` (dilatih EmoT/Twitter) = **F1 0.717**,
-jauh di atas alternatif review-produk `w11wo/...prdect-id` (0.419). Ganti via
-`INDOBERT_EMOTION_MODEL`. (Gate 0.82 adalah untuk sentimen; emosi 5-kelas ceiling
-realistisnya lebih rendah.)
-
-Toksisitas tervalidasi terhadap **hate-speech Indonesia** (Ibrohim & Budi 2019):
-
-```bash
-python scripts/eval_classifier.py --task toxicity --provider indobert --limit 600
-```
-
-`dehatebert` = **F1 0.865 (LULUS)** — well-calibrated untuk hate-speech nyata.
-
-**Ringkasan validasi classifier:** sentimen 0.894 ✓ · toksisitas 0.865 ✓ ·
-emosi 0.717 (SOTA 5-kelas) — semua tervalidasi gold set, tanpa pelabelan manual.
-
-## Observability (opsional)
-
-```bash
-docker compose --profile observability up -d   # Langfuse di http://localhost:3001
-```
-
-## Catatan kepatuhan
-
-Identitas penulis komentar disimpan sebagai `author_hash` (pseudonim) sejak ingestion;
-`data_policy=local_only` pada investigasi memaksa klasifikasi model lokal — konten tidak
-dikirim ke API pihak ketiga. Detail: PRD §12–13.
