@@ -13,6 +13,7 @@ Adapter berbasis halaman web (news/blog/website/rss) berbagi web_extract; vendor
 (tiktok/x_vendor) berbagi vendor_base.
 """
 
+from workers.adapters.appstore import AppStoreAdapter
 from workers.adapters.base import (
     AdapterNotConfigured,
     BaseAdapter,
@@ -42,7 +43,8 @@ from workers.adapters.youtube_transcript import YouTubeTranscriptAdapter
 
 _CLASSES: list[type[BaseAdapter]] = [
     RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, ForumAdapter, GitHubAdapter,
-    YouTubeAdapter, RedditAdapter, PlayStoreAdapter, TelegramAdapter, XAdapter, TikTokAdapter,
+    YouTubeAdapter, RedditAdapter, PlayStoreAdapter, AppStoreAdapter,
+    TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
     BPSAdapter, BMKGAdapter, CkanAdapter,  # ground truth resmi (statistik, gempa, data terbuka)
