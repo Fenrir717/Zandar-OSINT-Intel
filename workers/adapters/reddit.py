@@ -4,6 +4,7 @@ query = {
     "subreddits": ["indonesia", ...],
     "keywords": ["stimulus", ...],
     "limit": 100,                    # per subreddit, maks 100 per halaman
+    "max_pages": 3,                  # paginasi 'after' → tembus batas 100 (≤10 halaman)
     "sort": "new",
 }
 Fase 1: post via search.json publik + User-Agent deskriptif.
@@ -31,7 +32,8 @@ class RedditAdapter(BaseAdapter):
     def collect(self, query: dict) -> Iterator[RawItem]:
         keywords = query.get("keywords", [])
         q = " OR ".join(keywords) if keywords else "*"
-        limit = min(int(query.get("limit", 100)), 100)
+        per_page = min(int(query.get("limit", 100)), 100)  # maks 100/halaman (batas Reddit)
+        max_pages = max(1, min(int(query.get("max_pages", 3)), 10))  # paginasi 'after' → tembus 100
         sort = query.get("sort", "new")
 
         # Tiap target = (subreddit|None, restrict). Tanpa subreddit → pencarian
@@ -41,29 +43,41 @@ class RedditAdapter(BaseAdapter):
 
         for sub, restrict in targets:
             url = f"https://www.reddit.com/r/{sub}/search.json" if sub else "https://www.reddit.com/search.json"
-            params = {"q": q, "sort": sort, "limit": limit}
-            if restrict:
-                params["restrict_sr"] = 1
-            try:
-                resp = httpx.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=30)
-                resp.raise_for_status()
-            except httpx.HTTPError:
-                continue
+            after: str | None = None
+            for _page in range(max_pages):
+                params = {"q": q, "sort": sort, "limit": per_page}
+                if restrict:
+                    params["restrict_sr"] = 1
+                if after:
+                    params["after"] = after
+                try:
+                    resp = httpx.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=30)
+                    resp.raise_for_status()
+                    data = resp.json().get("data", {})
+                except (httpx.HTTPError, ValueError):
+                    break
 
-            for child in resp.json().get("data", {}).get("children", []):
-                post = child.get("data", {})
-                text = (post.get("title", "") + ". " + post.get("selftext", "")).strip(". ")
-                if not post.get("name") or not text:
-                    continue
-                yield RawItem(
-                    platform=self.platform,
-                    external_id=post["name"],  # t3_xxxxx — stabil
-                    author=post.get("author", "unknown"),
-                    content=text,
-                    url=f"https://www.reddit.com{post.get('permalink', '')}",
-                    published_at=datetime.fromtimestamp(post.get("created_utc", 0), tz=UTC)
-                    if post.get("created_utc")
-                    else None,
-                    raw=post,
-                )
-            time.sleep(2)  # jauh di bawah rate limit publik
+                children = data.get("children", [])
+                if not children:
+                    break
+                for child in children:
+                    post = child.get("data", {})
+                    text = (post.get("title", "") + ". " + post.get("selftext", "")).strip(". ")
+                    if not post.get("name") or not text:
+                        continue
+                    yield RawItem(
+                        platform=self.platform,
+                        external_id=post["name"],  # t3_xxxxx — stabil
+                        author=post.get("author", "unknown"),
+                        content=text,
+                        url=f"https://www.reddit.com{post.get('permalink', '')}",
+                        published_at=datetime.fromtimestamp(post.get("created_utc", 0), tz=UTC)
+                        if post.get("created_utc")
+                        else None,
+                        raw=post,
+                    )
+                after = data.get("after")
+                if not after:
+                    break  # habis halaman
+                time.sleep(1)  # sopan antar halaman
+            time.sleep(2)  # jauh di bawah rate limit publik antar target

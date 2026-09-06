@@ -46,7 +46,7 @@ class ForumAdapter(BaseAdapter):
             return
 
         keywords = query.get("keywords", [])
-        max_topics = int(query.get("max_topics", 20))
+        max_topics = int(query.get("max_topics", 60))
         include_replies = query.get("include_replies", True)
 
         topic_ids = self._search_topics(base, keywords, max_topics)

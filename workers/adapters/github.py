@@ -51,9 +51,9 @@ class GitHubAdapter(BaseAdapter):
         if not q.strip():
             return
 
-        max_items = int(query.get("max_items", 100))
+        max_items = int(query.get("max_items", 300))
         include_comments = query.get("include_comments", False)
-        max_comments = int(query.get("max_comments_per_item", 20))
+        max_comments = int(query.get("max_comments_per_item", 50))
 
         fetched = 0
         page = 1

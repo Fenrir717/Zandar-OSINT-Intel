@@ -67,7 +67,7 @@ class ApifyAdapter(BaseAdapter):
 
         token = self.config["api_token"]
         actor = self.config["actor_id"]
-        max_items = max(1, int(self.config.get("max_items", 500)))
+        max_items = max(1, int(self.config.get("max_items", 1000)))
         timeout_s = max(30, int(self.config.get("timeout_s", 180)))
 
         # Input dasar actor digabung dengan query koleksi (query menimpa input dasar).

@@ -50,7 +50,7 @@ class HarImportAdapter(BaseAdapter):
         text_fields = tuple(query.get("text_fields", _DEFAULT_TEXT))
         id_fields = tuple(query.get("id_fields", _DEFAULT_ID))
         keywords = [k.lower() for k in query.get("keywords", [])]
-        max_items = int(query.get("max_items", 500))
+        max_items = int(query.get("max_items", 2000))
 
         try:
             with open(har_path, encoding="utf-8") as f:

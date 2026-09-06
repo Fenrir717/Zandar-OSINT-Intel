@@ -41,7 +41,7 @@ class AppStoreAdapter(BaseAdapter):
     def collect(self, query: dict) -> Iterator[RawItem]:
         country = (query.get("country") or "id").lower()
         count = min(int(query.get("count", 200)), 500)
-        max_apps = int(query.get("max_apps", 3))
+        max_apps = int(query.get("max_apps", 5))
 
         app_ids = [str(a) for a in query.get("app_ids", []) if a]
         if not app_ids and query.get("keywords"):

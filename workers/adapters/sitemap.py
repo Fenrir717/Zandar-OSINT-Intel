@@ -57,7 +57,7 @@ class SitemapAdapter(BaseAdapter):
         d_from = _parse_date(query.get("from"))
         d_to = _parse_date(query.get("to"))
         max_urls = max(1, min(int(query.get("max_urls", 5000)), _MAX_URLS_CAP))
-        max_articles = max(1, min(int(query.get("max_articles", 400)), _MAX_ARTICLES_CAP))
+        max_articles = max(1, min(int(query.get("max_articles", 600)), _MAX_ARTICLES_CAP))
         delay = max(0.0, float(query.get("delay", 0.3)))
 
         seeds = [query["sitemap"]] if query.get("sitemap") else self._discover(root)

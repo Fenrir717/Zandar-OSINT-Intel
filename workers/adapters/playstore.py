@@ -40,7 +40,7 @@ class PlayStoreAdapter(BaseAdapter):
         lang = query.get("lang", "id")
         country = query.get("country", "id")
         count = min(int(query.get("count", 200)), 2000)
-        max_apps = int(query.get("max_apps", 3))
+        max_apps = int(query.get("max_apps", 5))
 
         # Tentukan daftar app: eksplisit, atau cari dari nama brand (keyword).
         app_ids = [a for a in query.get("app_ids", []) if a]

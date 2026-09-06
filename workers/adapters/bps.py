@@ -45,7 +45,7 @@ class BPSAdapter(BaseAdapter):
 
         domain = query.get("domain", "0000")
         keywords = [k.lower() for k in query.get("keywords", [])]
-        max_items = int(query.get("max_items", 50))
+        max_items = int(query.get("max_items", 200))
         url = f"{BASE}/model/pressrelease/lang/ind/domain/{domain}/key/{token}/"
 
         try:

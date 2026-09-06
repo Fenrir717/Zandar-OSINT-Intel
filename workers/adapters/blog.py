@@ -36,7 +36,7 @@ class BlogAdapter(BaseAdapter):
     legal_note = "Menghormati robots.txt; hanya konten publik."
 
     def collect(self, query: dict) -> Iterator[RawItem]:
-        max_posts = int(query.get("max_posts", 50))
+        max_posts = int(query.get("max_posts", 150))
         keywords = [k.lower() for k in query.get("keywords", [])]
 
         feeds: list[str] = list(query.get("feeds", []))

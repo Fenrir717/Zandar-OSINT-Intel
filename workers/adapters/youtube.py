@@ -35,13 +35,13 @@ class YouTubeAdapter(BaseAdapter):
         if not api_key:
             raise RuntimeError("YOUTUBE_API_KEY belum diisi (env / sources.config)")
 
-        max_per_video = int(query.get("max_per_video", 200))
+        max_per_video = int(query.get("max_per_video", 300))
 
         video_ids = list(query.get("video_ids", []))
         # Tanpa video_ids tapi ada keywords → cari video relevan (Indonesia) dulu.
         if not video_ids and query.get("keywords"):
             video_ids = self._search_videos(
-                api_key, query["keywords"], int(query.get("max_videos", 10))
+                api_key, query["keywords"], int(query.get("max_videos", 30))
             )
 
         for video_id in video_ids:
