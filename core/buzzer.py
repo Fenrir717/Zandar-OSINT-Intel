@@ -24,6 +24,15 @@ _MIN_VOLUME = 3          # akun perlu >=3 posting agar polanya bisa dinilai
 _SUSPECT_SCORE = 0.5     # ambang tandai "diduga buzzer"
 _CLUSTER_MIN_AUTHORS = 2  # dedup_hash dipakai >=2 akun berbeda → klaster terkoordinasi
 
+# Buzzer = perilaku AKUN sosial/UGC. Platform BERITA/KONTEN dikecualikan: di sana
+# "konten identik lintas-akun" = SINDIKASI PERS yang SAH (satu siaran pers BCA muncul
+# di banyak portal), BUKAN astroturf. Memasukkannya = false positive (terbukti pada
+# data: 62/62 klaster "koordinasi" ternyata rss+news sindikasi).
+SOCIAL_PLATFORMS: frozenset[str] = frozenset({
+    "telegram", "youtube", "reddit", "x", "x_vendor", "tiktok", "nitter",
+    "playstore", "appstore", "apify",
+})
+
 
 def _clamp(x: float) -> float:
     return 0.0 if x < 0 else 1.0 if x > 1 else round(x, 3)

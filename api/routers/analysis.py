@@ -140,13 +140,17 @@ async def buzzer(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, top: int = 12
 ) -> dict:
     """Buzzer / amplifikasi terkoordinasi — sinyal perilaku (repetisi, koordinasi,
-    burst), BUKAN follower. Akun = pseudonim author_hash (privasi UU PDP)."""
-    from core.buzzer import score_accounts
+    burst), BUKAN follower. Akun = pseudonim author_hash (privasi UU PDP).
+
+    HANYA platform SOSIAL/UGC (SOCIAL_PLATFORMS): portal berita dikecualikan karena
+    konten identik lintas-portal = sindikasi pers yang sah, bukan buzzer."""
+    from core.buzzer import SOCIAL_PLATFORMS, score_accounts
 
     rows = (await session.execute(
         select(Comment.author_hash, Comment.platform, Comment.dedup_hash,
                Comment.published_at, Comment.content)
-        .where(Comment.investigation_id == investigation_id)
+        .where(Comment.investigation_id == investigation_id,
+               Comment.platform.in_(SOCIAL_PLATFORMS))
     )).all()
     items = [
         {"author": a, "platform": p, "dup": d, "ts": ts, "content": c}
