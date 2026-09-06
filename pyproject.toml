@@ -26,6 +26,7 @@ dependencies = [
     "trafilatura>=2.0",
     "youtube-transcript-api>=0.6",
     "google-play-scraper>=1.2",
+    "telethon>=1.36",
 ]
 
 [project.optional-dependencies]
