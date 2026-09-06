@@ -26,8 +26,8 @@ from workers.adapters import ADAPTERS, describe_all
 # Kapabilitas koleksi per adapter (untuk memandu select_sources):
 #  keyword-OK  = produktif hanya dengan keywords (tanpa URL/target)
 #  butuh-URL   = perlu base_url/feeds/urls konkret → jangan dipilih untuk scan keyword-only
-_KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube", "playstore", "appstore"}
-_NEEDS_TARGET = {"blog", "website", "sitemap", "forum", "nitter", "satudata", "ckan", "telegram"}
+_KEYWORD_CAPABLE = {"rss", "news", "reddit", "youtube", "playstore", "appstore", "telegram"}
+_NEEDS_TARGET = {"blog", "website", "sitemap", "forum", "nitter", "satudata", "ckan"}
 
 
 def _source_catalog() -> str:

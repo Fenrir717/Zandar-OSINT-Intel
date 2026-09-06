@@ -9,15 +9,21 @@ interaktif, jadi ini disiapkan analis lalu ditempel.
 Hanya channel PUBLIK (username / @name / t.me/name). Invite link privat (t.me/+... /
 joinchat) DILEWATI — kita tidak bergabung ke grup privat.
 
+KEYWORD-CAPABLE (auto-target): bila `channels` kosong tapi `keywords` ada, adapter
+MENEMUKAN sendiri channel publik relevan via pencarian global MTProto — analis tak
+perlu mengetik username. Sejalan dgn agen Recon untuk website.
+
 collect() sinkron tapi Telethon async → dijalankan di thread terpisah dgn event loop
 sendiri (aman walau worker sudah punya loop berjalan). Volume dibatasi per-channel.
 
 query = {
-    "channels": ["@detikcom", "t.me/kompascom", "cnbcindonesia"],  # WAJIB (publik)
-    "keywords": ["stimulus", "phk"],       # opsional: search server-side per keyword
+    "keywords": ["stimulus", "phk"],       # keyword: search + AUTO-DISCOVER channel
+    "channels": ["@detikcom", "cnbcindonesia"],  # opsional: channel eksplisit (menimpa discover)
+    "max_channels": 6,                       # maks channel hasil auto-discover
     "limit": 200,                            # maks pesan per channel
     "min_date": "2026-01-01",                # opsional: hanya pesan >= tanggal ini
 }
+Butuh 'channels' ATAU 'keywords'.
 """
 
 import asyncio
@@ -52,9 +58,10 @@ class TelegramAdapter(BaseAdapter):
                 "TELEGRAM_SESSION (.env) atau Sources.config."
             )
         channels = _channels(query)
-        if not channels:
+        keywords = [k for k in query.get("keywords", []) if k]
+        if not channels and not keywords:
             raise AdapterNotConfigured(
-                "Telegram butuh 'channels' (daftar username/@/t.me channel publik) pada query"
+                "Telegram butuh 'channels' (publik) ATAU 'keywords' (auto-discover channel)"
             )
 
         # Telethon async → jalankan di thread + loop sendiri, kumpulkan, lalu yield.
@@ -101,6 +108,11 @@ class TelegramAdapter(BaseAdapter):
                     "Sesi Telegram tak terotorisasi — buat ulang StringSession "
                     "(scripts/telegram_session.py)"
                 )
+            if not channels:  # keyword-capable: temukan channel publik dari keyword
+                channels = await _discover_channels(
+                    client, keywords, int(query.get("max_channels", 6)))
+                if not channels:
+                    return
             for uname in channels:
                 try:
                     await self._one_channel(client, uname, keywords, per_channel, min_date, out)
@@ -144,6 +156,34 @@ class TelegramAdapter(BaseAdapter):
                 ))
                 if len(seen) >= per_channel:
                     break
+
+
+async def _discover_channels(client, keywords: list[str], max_channels: int) -> list[str]:
+    """Keyword → channel publik relevan via pencarian global MTProto (contacts.Search).
+
+    Menghilangkan beban analis mengetik username channel — sejalan dgn agen Recon
+    untuk website. Hanya channel broadcast/megagroup PUBLIK (punya username). Urutan
+    mengikuti relevansi Telegram; dedup; dibatasi max_channels."""
+    from telethon.tl.functions.contacts import SearchRequest
+    from telethon.tl.types import Channel
+
+    found: list[str] = []
+    seen: set[str] = set()
+    for kw in keywords[:5]:
+        if len(found) >= max_channels:
+            break
+        try:
+            res = await client(SearchRequest(q=kw, limit=max_channels * 2))
+        except Exception:  # noqa: BLE001 — satu keyword gagal cari tak fatal
+            continue
+        for ch in getattr(res, "chats", []):
+            u = getattr(ch, "username", None)
+            if isinstance(ch, Channel) and u and u.lower() not in seen:
+                seen.add(u.lower())
+                found.append(u)
+                if len(found) >= max_channels:
+                    break
+    return found[:max_channels]
 
 
 def _channels(query: dict) -> list[str]:

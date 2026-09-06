@@ -169,7 +169,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `youtube_transcript` | free | 🔑 | closed caption publik (tanpa kuota Data API) |
 | `har` | free | ✅ | parse `.har` ekspor manual analis (human-in-the-loop) |
 | `github` | free | 🔑 | REST resmi (butuh token) |
-| `telegram` | free | 🔗 🔑 | **channel publik via MTProto/Telethon** — gratis, skala besar (berita/komunitas/buzzer). Butuh `api_id/api_hash` (my.telegram.org) + StringSession (`scripts/telegram_session.py`, sekali). Hanya channel publik |
+| `telegram` | free | ✅ keyword 🔑 | **channel publik via MTProto** — keyword → **auto-discover channel** (contacts.Search), tak perlu ketik username. Gratis, skala besar (berita/komunitas/buzzer). Butuh `api_id/api_hash` + StringSession (`scripts/telegram_session.py`, sekali) |
 | `nitter` | free | 🔗 | front-end X publik — mayoritas instance mati sejak 2024 |
 | `x` | metered | 🔑 | API v2 pay-per-use (~$0,005/post) — **cost guard wajib** |
 | `x_vendor`, `tiktok` | vendor | 🔑 | shadow API / penyedia data berkontrak |
