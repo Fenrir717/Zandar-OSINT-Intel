@@ -29,6 +29,7 @@ Dokumen ini **tidak melebih-lebihkan**. Penanda status dipakai konsisten:
 |---|---|---|
 | **Forensik narasi & sentimen** | koleksi → klasifikasi IndoBERT → klaster narasi (Graph C) → kuadran otentisitas×kebenaran, deteksi CIB | ✅ |
 | **Skor reputasi agregat** | rating bintang review (Play/App Store) + sentimen teks → indeks reputasi 0-100 + distribusi + per-platform | ✅ |
+| **Early Warning (deteksi krisis)** | lonjakan komentar negatif per jam vs baseline → level calm/elevated/spike + alert **Telegram/email gratis** ke tim PR (dedup) | ✅ |
 | **Scan Commander (autonomous loop)** | 1 keyword → agen pilih sumber → koleksi → analisis penuh **otomatis** | ✅ |
 | **Verifikasi klaim** | klaim narasi diadu ke ground-truth resmi **BPS/BMKG** (Graph E, gaya AVeriTeC) | ✅ |
 | **Riset Pasar Geospasial** | kategori + lokasi → peta kompetitor, jarak aman, radius, sub-zona efektif (OpenStreetMap) | ✅ |

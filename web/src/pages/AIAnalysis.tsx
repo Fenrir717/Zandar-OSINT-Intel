@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts";
-import { api, type AnalysisStats, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
+import { api, type AnalysisStats, type EarlyWarning, type EntitySentiment, type Evidence, type Narrative, type ReputationSummary } from "../lib/api";
 import { InvestigationPicker, useInvestigations } from "../lib/useInvestigations";
 import { Button, Card, Empty, Pill, Spinner, Tile } from "../components/ui";
 import { Icon } from "../components/icons";
@@ -17,6 +17,44 @@ const tip = { background: "var(--surface)", border: "1px solid var(--line)", bor
 
 function arr(d: Record<string, number> | undefined) {
   return Object.entries(d || {}).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+}
+
+function EarlyWarningCard({ ew }: { ew: EarlyWarning }) {
+  const cfg = {
+    spike: { tone: "crit", label: "SPIKE — Potensi Krisis" },
+    elevated: { tone: "warn", label: "ELEVATED — Pantau Ketat" },
+    calm: { tone: "ok", label: "Normal" },
+  }[ew.level];
+  const color = `var(--${cfg.tone})`;
+  return (
+    <Card style={{ padding: 16, marginBottom: 16, borderLeft: `4px solid ${color}` }}>
+      <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ minWidth: 200, flex: "1 1 200px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: color, boxShadow: `0 0 0 4px color-mix(in srgb, ${color} 22%, transparent)` }} />
+            <b style={{ fontSize: 14, color }}>Peringatan Dini · {cfg.label}</b>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 5 }}>{ew.reason}</div>
+        </div>
+        <div style={{ display: "flex", gap: 18 }}>
+          {[["Negatif/jam", ew.current, color], ["Baseline", ew.baseline, "var(--ink)"], ["Rasio", `${ew.ratio}×`, color]].map(([k, v, c]) => (
+            <div key={k as string}>
+              <div style={{ fontSize: 10.5, color: "var(--faint)", textTransform: "uppercase", letterSpacing: ".05em" }}>{k}</div>
+              <div className="tnum" style={{ fontSize: 20, fontWeight: 800, color: c as string }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: "1 1 160px", minWidth: 140, height: 46 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={ew.series} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+              <Area type="monotone" dataKey="neg" stroke={color} fill={color} fillOpacity={0.16} strokeWidth={1.6} />
+              <Tooltip contentStyle={tip} formatter={(v: number) => [v, "negatif"]} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function ReputationCard({ rep }: { rep: ReputationSummary }) {
@@ -69,6 +107,7 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
   const { list, selected, choose } = useInvestigations();
   const [stats, setStats] = useState<AnalysisStats | null>(null);
   const [rep, setRep] = useState<ReputationSummary | null>(null);
+  const [ew, setEw] = useState<EarlyWarning | null>(null);
   const [nars, setNars] = useState<Narrative[]>([]);
   const [ents, setEnts] = useState<EntitySentiment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,14 +121,15 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
     if (!selected) return;
     setLoading(true);
     try {
-      const [s, n, e, rp] = await Promise.all([
+      const [s, n, e, rp, w] = await Promise.all([
         api.analysisStats(selected),
         api.narratives(selected).catch(() => []),
         api.entities(selected).catch(() => []),
         api.reputation(selected).catch(() => null),
+        api.earlyWarning(selected).catch(() => null),
       ]);
-      setStats(s); setNars(n); setEnts(e); setRep(rp);
-    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); }
+      setStats(s); setNars(n); setEnts(e); setRep(rp); setEw(w);
+    } catch { setStats(null); setNars([]); setEnts([]); setRep(null); setEw(null); }
     finally { setLoading(false); }
   }
   async function run() {
@@ -114,6 +154,8 @@ export function AIAnalysis({ headerSlot }: { headerSlot: (node: React.ReactNode)
         <Button variant="ghost" icon="refresh" onClick={load}>Segarkan</Button>
         <Button icon="spark" onClick={run} disabled={busy}>{busy ? "Menjalankan…" : "Jalankan Analisis"}</Button>
       </div>
+
+      {ew && (ew.level !== "calm" || ew.total_negative > 0) && <EarlyWarningCard ew={ew} />}
 
       {rep && rep.total > 0 && rep.reputation_index != null && <ReputationCard rep={rep} />}
 

@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
 
+    # Early Warning alerts (opsional, gratis) — Telegram utama; email via SMTP
+    telegram_alert_bot_token: str = ""   # env: TELEGRAM_ALERT_BOT_TOKEN (buat bot via @BotFather)
+    telegram_alert_chat_id: str = ""     # env: TELEGRAM_ALERT_CHAT_ID (chat/grup tim PR)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    alert_email_to: str = ""             # penerima email alert (koma untuk banyak)
+
 
 @lru_cache
 def get_settings() -> Settings:

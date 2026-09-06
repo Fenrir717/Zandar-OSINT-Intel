@@ -125,6 +125,12 @@ export interface ReputationSummary {
   by_platform: Record<string, { count: number; avg_rating: number | null; rated: number }>;
   caveats: string[];
 }
+export interface EarlyWarning {
+  level: "calm" | "elevated" | "spike";
+  current: number; baseline: number; ratio: number; z: number;
+  window_buckets: number; reason: string; hours: number; total_negative: number;
+  series: { t: string; neg: number }[];
+}
 export interface ReportMeta {
   id: string; title: string; status: string; classification: string;
   created_at: string | null; generated_by_run: string | null;
@@ -286,6 +292,7 @@ export const api = {
   narrativeEvidence: (narrativeId: string) => req<Evidence[]>(`/narratives/${narrativeId}/evidence`),
   analysisStats: (inv: string) => req<AnalysisStats>(`/analysis/${inv}/stats`),
   reputation: (inv: string) => req<ReputationSummary>(`/analysis/${inv}/reputation`),
+  earlyWarning: (inv: string, hours = 48) => req<EarlyWarning>(`/analysis/${inv}/early-warning?hours=${hours}`),
   entities: (inv: string) => req<EntitySentiment[]>(`/analysis/${inv}/entities`),
   chatInvestigation: (inv: string, question: string, history: { role: string; content: string }[] = []) =>
     req<{ answer: string }>(`/analysis/${inv}/chat`, {

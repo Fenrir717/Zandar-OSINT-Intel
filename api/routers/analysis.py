@@ -54,6 +54,51 @@ async def reputation(
     return aggregate_reputation(items)
 
 
+@router.get("/{investigation_id}/early-warning")
+async def early_warning(
+    investigation_id: uuid.UUID, session: DbSession, user: CurrentUser, hours: int = 48
+) -> dict:
+    """Deteksi krisis dini: volume komentar NEGATIF per jam (jendela terakhir) vs
+    baseline → level calm/elevated/spike + seri untuk grafik."""
+    from collections import Counter
+    from datetime import UTC, datetime, timedelta
+
+    from core.early_warning import detect_spike
+
+    hours = max(6, min(int(hours), 168))
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    rows = (await session.execute(
+        select(Comment.published_at)
+        .join(Analysis, Analysis.comment_id == Comment.id)
+        .where(
+            Comment.investigation_id == investigation_id,
+            Analysis.sentiment == "neg",
+            Comment.published_at.is_not(None),
+            Comment.published_at >= since,
+        )
+    )).all()
+
+    buckets: Counter = Counter()
+    for (pa,) in rows:
+        hr = pa.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        buckets[hr] += 1
+
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    t = since.replace(minute=0, second=0, microsecond=0)
+    series, vals = [], []
+    while t <= now:
+        v = buckets.get(t, 0)
+        series.append({"t": t.strftime("%d/%m %H:%M"), "neg": v})
+        vals.append(v)
+        t += timedelta(hours=1)
+
+    status = detect_spike(vals, current_window=1)
+    status["hours"] = hours
+    status["total_negative"] = int(sum(vals))
+    status["series"] = series[-72:]  # maks 72 titik untuk grafik
+    return status
+
+
 @router.get("/{investigation_id}/stats")
 async def analysis_stats(
     investigation_id: uuid.UUID, session: DbSession, user: CurrentUser

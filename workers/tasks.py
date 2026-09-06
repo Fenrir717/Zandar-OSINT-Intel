@@ -14,6 +14,7 @@ from croniter import croniter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from core.config import get_settings
 from core.db import worker_session
 from core.events import publish_agent_event
 from core.models import Analysis, Collection, CollectionRun, Comment, Investigation, Source
@@ -285,6 +286,70 @@ def _ner_and_write(inv_id: str, texts: list[str], sentiments: list[dict] | None 
 
     ents = get_ner().extract(texts)
     return graph.write_graph(inv_id, ents, sentiments)
+
+
+# ---------------------------------------------------------------- Early Warning (deteksi krisis)
+
+@celery_app.task(bind=True)
+def check_early_warning(self, investigation_id: str, hours: int = 48) -> dict:
+    """Deteksi lonjakan komentar negatif → kirim alert (Telegram/email) ke tim PR.
+    Dedup via Redis (TTL 3 jam) agar tak spam. Cocok dijadwalkan beat per investigasi."""
+    return asyncio.run(_check_early_warning(investigation_id, hours))
+
+
+async def _check_early_warning(investigation_id: str, hours: int) -> dict:
+    from collections import Counter
+    from datetime import UTC, datetime, timedelta
+
+    from core.early_warning import detect_spike
+
+    hours = max(6, min(int(hours), 168))
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    async with worker_session() as session:
+        rows = (await session.execute(
+            select(Comment.published_at)
+            .join(Analysis, Analysis.comment_id == Comment.id)
+            .where(
+                Comment.investigation_id == uuid.UUID(investigation_id),
+                Analysis.sentiment == "neg",
+                Comment.published_at.is_not(None),
+                Comment.published_at >= since,
+            )
+        )).all()
+        inv = await session.get(Investigation, uuid.UUID(investigation_id))
+        title = inv.title if inv else investigation_id
+
+    buckets: Counter = Counter()
+    for (pa,) in rows:
+        buckets[pa.astimezone(UTC).replace(minute=0, second=0, microsecond=0)] += 1
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    t = since.replace(minute=0, second=0, microsecond=0)
+    vals: list[int] = []
+    while t <= now:
+        vals.append(buckets.get(t, 0))
+        t += timedelta(hours=1)
+
+    status = detect_spike(vals)
+    alerted = False
+    if status["level"] == "spike":
+        try:
+            import redis as _redis
+
+            from core.alerts import send_alert
+
+            rc = _redis.from_url(get_settings().redis_url)
+            key = f"ew_alert:{investigation_id}"
+            if not rc.get(key):  # dedup: sudah alert dalam 3 jam terakhir?
+                text = (f"🚨 <b>Early Warning — {title}</b>\n{status['reason']}\n"
+                        f"Negatif terkini: {status['current']} (baseline {status['baseline']}, {status['ratio']}×).")
+                send_alert(text, subject=f"[Zandar] Potensi krisis: {title}")
+                rc.set(key, "1", ex=3 * 3600)
+                alerted = True
+            rc.close()
+        except Exception:  # Redis/alert gagal — jangan meledak
+            pass
+
+    return {"investigation_id": investigation_id, **status, "alerted": alerted}
 
 
 # ---------------------------------------------------------------- Autonomous loop (Commander)
