@@ -12,6 +12,10 @@ berhenti sopan, bukan lawan anti-bot).
 query = {
     "url": "https://www.tiktok.com/@user",   # profil/playlist/sound/video, WAJIB
     "max_items": 50,                          # batas entri feed
+    # pacing sopan (opsional, native yt-dlp) — BUKAN evasion:
+    "delay_min": 0.5, "delay_max": 2.0,       # jeda acak antar-request ekstraksi
+    "delay_requests": 1.0,                    # jeda tetap tiap request (sleep_interval_requests)
+    "user_agent": "...", "accept_language": "id-ID,...",  # UA jujur + bahasa (override default)
 }
 """
 
@@ -19,6 +23,7 @@ from collections.abc import Iterator
 from datetime import datetime
 
 from workers.adapters.base import AdapterNotConfigured, BaseAdapter, RawItem
+from workers.adapters.pacing import accept_language, q_float, user_agent
 
 _MAX_CAP = 500
 
@@ -41,9 +46,16 @@ class YtDlpAdapter(BaseAdapter):
             raise AdapterNotConfigured('yt-dlp belum terpasang: pip install -e ".[social]"') from exc
 
         max_items = max(1, min(int(query.get("max_items", 50)), _MAX_CAP))
+        # Pacing sopan (native yt-dlp) + UA jujur + bahasa ID — config-driven, BUKAN evasion.
+        d_min = q_float(query, "delay_min", 0.5)
+        d_max = max(d_min, q_float(query, "delay_max", 2.0))
         opts = {
             "skip_download": True, "quiet": True, "no_warnings": True,
             "ignoreerrors": True, "playlistend": max_items, "extract_flat": False,
+            "user_agent": user_agent(query),
+            "http_headers": {"Accept-Language": accept_language(query)},
+            "sleep_interval_requests": q_float(query, "delay_requests", 1.0),
+            "sleep_interval": d_min, "max_sleep_interval": d_max,
         }
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:

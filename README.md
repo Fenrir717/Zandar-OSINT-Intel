@@ -178,15 +178,18 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `x_vendor`, `tiktok` | vendor | 🔑 | shadow API / penyedia data berkontrak |
 | `apify` | vendor | 🔑 | **actor Apify** (bayar-per-run) → sumber anti-bot **legal**: Google Maps reviews, Shopee, Instagram, dll. Satu adapter, banyak actor via config; rating review → skor reputasi. `field_map` eksplisit, cap biaya wajib |
 | `ytdlp` | free | 🔗 URL | **yt-dlp** — caption + metadata publik TikTok/YouTube (video tak diunduh). Request polos, andal. Tanpa komentar. Pasang: `pip install -e ".[social]"` |
-| `instagram` | free | 🔗 🧪 | **Instaloader** — profil/post/komentar publik. Request polos; tanpa login **ke-rate-limit** (volume kecil, rapuh). Untuk volume andal → vendor |
-| `facebook` | free | 🔗 🧪 | **facebook-scraper** — post/komentar halaman publik. Request polos; **risiko IP-ban** bila agresif, cookie login (opsional, akun sendiri) naikkan reliabilitas |
+| `instagram` | free | 🔗 🧪 | **Instaloader** — profil/post/komentar publik. Request polos + *pacing sopan* (jeda acak/UA jujur, configurable); tanpa login **ke-rate-limit** (volume kecil, rapuh). Untuk volume andal → vendor |
+| `facebook` | free | 🔗 🧪 | **facebook-scraper** — post/komentar halaman publik. Request polos + *pacing sopan*; **risiko IP-ban** bila agresif, cookie login (opsional, akun sendiri) naikkan reliabilitas |
 | `bps`, `bmkg` | free | ✅ | **ground-truth resmi** (statistik, gempa) — untuk verifikasi, bukan wacana |
 | `ckan` (satudata) | free | 🔗 | portal data terbuka daerah (butuh `base_url`) |
 
 **Prinsip kepatuhan:** TIDAK ada akun tumbal, rotasi token/IP, atau bypass
-bot-detection — itu mencemari kepatuhan (UU PDP) dan membuat lalu lintas kita
-menyerupai CIB yang justru kita deteksi. Jalur murah = arsip publik + vendor +
-import manual + pencarian resmi, **bukan** scraping gerilya.
+bot-detection (hapus `navigator.webdriver`/stealth) — itu mencemari kepatuhan
+(UU PDP) dan membuat lalu lintas kita menyerupai CIB yang justru kita deteksi.
+Jalur murah = arsip publik + vendor + import manual + pencarian resmi, **bukan**
+scraping gerilya. Yang **kita pakai** utk scraper `[social]` rapuh: *pacing sopan*
+— jeda acak + batching + **satu** UA browser jujur (sopan santun & kurangi beban
+server, tetap 1 identitas yg bisa diblokir), lihat `workers/adapters/pacing.py`.
 
 ---
 

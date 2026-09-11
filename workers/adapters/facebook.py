@@ -6,20 +6,26 @@ komentar.
 
 Batas JUJUR (dari README tool): FB agresif blokir → "scrape terlalu banyak, IP bisa
 di-ban sementara". Banyak field bisa `None`; grup sering cuma 1 halaman. Reliabilitas
-naik dgn COOKIE login akun-mu sendiri (opsional, config) — risikomu. Kita TIDAK tambah
-proxy/rotasi utk menembus blokir. Untuk volume FB andal → vendor.
+naik dgn COOKIE login akun-mu sendiri (opsional, config) — risikomu. Kita TAMBAH pacing
+sopan (jeda acak + 1 UA jujur), TIDAK proxy/rotasi/stealth utk menembus blokir. Untuk
+volume FB andal → vendor.
 
 query = {
     "pages": ["BankBCA", ...],   # nama/username halaman publik (atau ID grup publik)
     "max_pages": 5,               # halaman feed (tiap halaman ~beberapa post)
     "with_comments": false,       # ambil komentar? (lebih berat)
     "cookies": "path/cookies.txt", # opsional: cookie login akun sendiri (netscape/json)
+    # pacing sopan (opsional) — bukan evasion:
+    "delay_min": 3.0, "delay_max": 8.0,   # jeda acak antar-post (default sudah aktif)
+    "batch_size": 0, "batch_rest_sec": 0, # ambil N post lalu istirahat X dtk (0 = mati)
+    "user_agent": "...",           # 1 UA jujur (override default; bukan rotasi)
 }
 """
 
 from collections.abc import Iterator
 
 from workers.adapters.base import AdapterNotConfigured, BaseAdapter, RawItem
+from workers.adapters.pacing import PolitePacer, user_agent
 
 _MAX_PAGES_CAP = 50
 
@@ -34,7 +40,7 @@ class FacebookAdapter(BaseAdapter):
 
     def collect(self, query: dict) -> Iterator[RawItem]:
         try:
-            from facebook_scraper import get_posts  # lazy
+            import facebook_scraper as fbs  # lazy
         except ImportError as exc:
             raise AdapterNotConfigured('facebook-scraper belum terpasang: pip install -e ".[social]"') from exc
 
@@ -42,14 +48,22 @@ class FacebookAdapter(BaseAdapter):
         if not pages:
             raise AdapterNotConfigured("Facebook butuh 'pages' (halaman/grup publik) pada query")
 
+        try:  # 1 UA jujur (bukan rotasi); best-effort — API bisa beda antar-versi
+            if hasattr(fbs, "set_user_agent"):
+                fbs.set_user_agent(user_agent(query))
+        except Exception:  # noqa: BLE001
+            pass
+
         max_pages = max(1, min(int(query.get("max_pages", 5)), _MAX_PAGES_CAP))
         cookies = query.get("cookies")  # opsional: akun sendiri
         with_comments = bool(query.get("with_comments", False))
         opts = {"comments": with_comments, "reactions": False}
+        pacer = PolitePacer.from_query(query, delay_min=3.0, delay_max=8.0)
 
         for page in pages:
             try:
-                for post in get_posts(page, pages=max_pages, cookies=cookies, options=opts):
+                for post in fbs.get_posts(page, pages=max_pages, cookies=cookies, options=opts):
+                    pacer.wait()  # jeda sopan antar-post
                     yield from self._emit_post(post, page, with_comments)
             except Exception:  # noqa: BLE001 — FB blokir/ban/berubah → berhenti sopan per-halaman
                 continue
