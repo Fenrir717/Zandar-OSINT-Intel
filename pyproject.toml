@@ -40,6 +40,14 @@ ml = [
     "torch>=2.2",
     "transformers>=4.44",
 ]
+# Scraper publik sopan self-hosted (opsional). Request polos, TANPA proxy/spoofing.
+# Rapuh untuk IG/FB (platform blokir); untuk volume andal pakai vendor. Pasang bila
+# perlu: pip install -e ".[social]"
+social = [
+    "yt-dlp>=2024.1",
+    "instaloader>=4.11",
+    "facebook-scraper>=0.2.59",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -151,7 +151,7 @@ di `geo/catalog.py` — tambah kategori = tambah entri, engine tak berubah.
 
 ---
 
-## Adapter koleksi (23 metode, 3 tier)
+## Adapter koleksi (26 metode, 3 tier)
 
 Semua adapter berbagi kontrak `collect(query) → RawItem[]` dan mendeklarasikan metadata
 akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters`.
@@ -177,6 +177,9 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `x` | metered | 🔑 | API v2 pay-per-use (~$0,005/post) — **cost guard wajib** |
 | `x_vendor`, `tiktok` | vendor | 🔑 | shadow API / penyedia data berkontrak |
 | `apify` | vendor | 🔑 | **actor Apify** (bayar-per-run) → sumber anti-bot **legal**: Google Maps reviews, Shopee, Instagram, dll. Satu adapter, banyak actor via config; rating review → skor reputasi. `field_map` eksplisit, cap biaya wajib |
+| `ytdlp` | free | 🔗 URL | **yt-dlp** — caption + metadata publik TikTok/YouTube (video tak diunduh). Request polos, andal. Tanpa komentar. Pasang: `pip install -e ".[social]"` |
+| `instagram` | free | 🔗 🧪 | **Instaloader** — profil/post/komentar publik. Request polos; tanpa login **ke-rate-limit** (volume kecil, rapuh). Untuk volume andal → vendor |
+| `facebook` | free | 🔗 🧪 | **facebook-scraper** — post/komentar halaman publik. Request polos; **risiko IP-ban** bila agresif, cookie login (opsional, akun sendiri) naikkan reliabilitas |
 | `bps`, `bmkg` | free | ✅ | **ground-truth resmi** (statistik, gempa) — untuk verifikasi, bukan wacana |
 | `ckan` (satudata) | free | 🔗 | portal data terbuka daerah (butuh `base_url`) |
 

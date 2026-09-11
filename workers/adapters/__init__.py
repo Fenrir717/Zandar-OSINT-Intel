@@ -25,9 +25,11 @@ from workers.adapters.blog import BlogAdapter
 from workers.adapters.bmkg import BMKGAdapter
 from workers.adapters.bps import BPSAdapter
 from workers.adapters.ckan import CkanAdapter
+from workers.adapters.facebook import FacebookAdapter
 from workers.adapters.forum import ForumAdapter
 from workers.adapters.github import GitHubAdapter
 from workers.adapters.har_import import HarImportAdapter
+from workers.adapters.instagram import InstagramAdapter
 from workers.adapters.news import NewsAdapter
 from workers.adapters.nitter import NitterAdapter
 from workers.adapters.playstore import PlayStoreAdapter
@@ -42,6 +44,7 @@ from workers.adapters.x_twitter import XAdapter
 from workers.adapters.x_vendor import XVendorAdapter
 from workers.adapters.youtube import YouTubeAdapter
 from workers.adapters.youtube_transcript import YouTubeTranscriptAdapter
+from workers.adapters.ytdlp import YtDlpAdapter
 
 _CLASSES: list[type[BaseAdapter]] = [
     RssAdapter, NewsAdapter, BlogAdapter, WebsiteAdapter, SitemapAdapter, ForumAdapter, GitHubAdapter,
@@ -49,6 +52,7 @@ _CLASSES: list[type[BaseAdapter]] = [
     TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, ApifyAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
+    YtDlpAdapter, InstagramAdapter, FacebookAdapter,  # scraper publik sopan (self-hosted)
     BPSAdapter, BMKGAdapter, CkanAdapter,  # ground truth resmi (statistik, gempa, data terbuka)
 ]
 
