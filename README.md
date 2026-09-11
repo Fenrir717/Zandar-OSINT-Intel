@@ -180,6 +180,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `ytdlp` | free | 🔗 URL | **yt-dlp** — caption + metadata publik TikTok/YouTube (video tak diunduh). Request polos, andal. Tanpa komentar. Pasang: `pip install -e ".[social]"` |
 | `instagram` | free | 🔗 🧪 | **Instaloader** — profil/post/komentar publik. Request polos + *pacing sopan* (jeda acak/UA jujur, configurable); tanpa login **ke-rate-limit** (volume kecil, rapuh). Untuk volume andal → vendor |
 | `facebook` | free | 🔗 🧪 | **facebook-scraper** — post/komentar halaman publik. Request polos + *pacing sopan*; **risiko IP-ban** bila agresif, cookie login (opsional, akun sendiri) naikkan reliabilitas |
+| `facebook_page` | free | 🔗 🧪 | **kartu bisnis Page** (kategori/alamat/telp/email/web/jam/rating/followers) — `httpx` polos + 1 UA jujur, **tanpa** curl_cffi/spoof (tanpa dep tambahan). Parser adaptasi MIT. Probe 12/09/26: FB balas **400** ke klien polos → yield ~0 di domain utama; nilai utama = **parser reusable** utk transport vendor (Scrapfly/Apify) |
 | `bps`, `bmkg` | free | ✅ | **ground-truth resmi** (statistik, gempa) — untuk verifikasi, bukan wacana |
 | `ckan` (satudata) | free | 🔗 | portal data terbuka daerah (butuh `base_url`) |
 

@@ -26,6 +26,7 @@ from workers.adapters.bmkg import BMKGAdapter
 from workers.adapters.bps import BPSAdapter
 from workers.adapters.ckan import CkanAdapter
 from workers.adapters.facebook import FacebookAdapter
+from workers.adapters.facebook_page import FacebookPageAdapter
 from workers.adapters.forum import ForumAdapter
 from workers.adapters.github import GitHubAdapter
 from workers.adapters.har_import import HarImportAdapter
@@ -52,7 +53,7 @@ _CLASSES: list[type[BaseAdapter]] = [
     TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, ApifyAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
-    YtDlpAdapter, InstagramAdapter, FacebookAdapter,  # scraper publik sopan (self-hosted)
+    YtDlpAdapter, InstagramAdapter, FacebookAdapter, FacebookPageAdapter,  # scraper publik sopan (self-hosted)
     BPSAdapter, BMKGAdapter, CkanAdapter,  # ground truth resmi (statistik, gempa, data terbuka)
 ]
 
