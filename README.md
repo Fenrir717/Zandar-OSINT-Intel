@@ -181,6 +181,7 @@ akses (dibaca UI, planner, estimasi biaya) — cek `GET /api/v1/sources/adapters
 | `instagram` | free | 🔗 🧪 | **Instaloader** — profil/post/komentar publik. Request polos + *pacing sopan* (jeda acak/UA jujur, configurable); tanpa login **ke-rate-limit** (volume kecil, rapuh). Untuk volume andal → vendor |
 | `facebook` | free | 🔗 🧪 | **facebook-scraper** — post/komentar halaman publik. Request polos + *pacing sopan*; **risiko IP-ban** bila agresif, cookie login (opsional, akun sendiri) naikkan reliabilitas |
 | `facebook_page` | free | 🔗 🧪 | **kartu bisnis Page** (kategori/alamat/telp/email/web/jam/rating/followers) — `httpx` polos + 1 UA jujur, **tanpa** curl_cffi/spoof (tanpa dep tambahan). Parser adaptasi MIT. Probe 12/09/26: FB balas **400** ke klien polos → yield ~0 di domain utama; nilai utama = **parser reusable** utk transport vendor (Scrapfly/Apify) |
+| `threads` | free | 🔗 🧪 | **Meta Threads** komentar/replies **by keyword**, logged-out (tanpa login) — GraphQL publik guest via `httpx` + **Playwright polos** (tangkap token + search), **tanpa** stealth/proxy + pacing sopan. Butuh `playwright install chromium`. Adaptasi MIT (galihkjaya). Fragile (GraphQL privat); volume → vendor |
 | `bps`, `bmkg` | free | ✅ | **ground-truth resmi** (statistik, gempa) — untuk verifikasi, bukan wacana |
 | `ckan` (satudata) | free | 🔗 | portal data terbuka daerah (butuh `base_url`) |
 

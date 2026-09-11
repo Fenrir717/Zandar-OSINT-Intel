@@ -47,6 +47,7 @@ social = [
     "yt-dlp>=2024.1",
     "instaloader>=4.11",
     "facebook-scraper>=0.2.59",
+    "playwright>=1.40",  # adapter Threads (cari keyword + tangkap token guest); butuh: python -m playwright install chromium
 ]
 
 [build-system]

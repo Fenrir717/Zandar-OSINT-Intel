@@ -38,6 +38,7 @@ from workers.adapters.reddit import RedditAdapter
 from workers.adapters.rss import RssAdapter
 from workers.adapters.sitemap import SitemapAdapter
 from workers.adapters.telegram import TelegramAdapter
+from workers.adapters.threads import ThreadsAdapter
 from workers.adapters.tiktok import TikTokAdapter
 from workers.adapters.wayback import WaybackAdapter
 from workers.adapters.website import WebsiteAdapter
@@ -53,7 +54,8 @@ _CLASSES: list[type[BaseAdapter]] = [
     TelegramAdapter, XAdapter, TikTokAdapter,
     # metode koleksi tambahan (revisi 30 Agu 2026)
     XVendorAdapter, ApifyAdapter, HarImportAdapter, YouTubeTranscriptAdapter, WaybackAdapter, NitterAdapter,
-    YtDlpAdapter, InstagramAdapter, FacebookAdapter, FacebookPageAdapter,  # scraper publik sopan (self-hosted)
+    YtDlpAdapter, InstagramAdapter, FacebookAdapter, FacebookPageAdapter, ThreadsAdapter,  # scraper publik sopan
+
     BPSAdapter, BMKGAdapter, CkanAdapter,  # ground truth resmi (statistik, gempa, data terbuka)
 ]
 
