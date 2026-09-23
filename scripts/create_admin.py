@@ -5,6 +5,7 @@
 
 import argparse
 import asyncio
+import os
 
 from sqlalchemy import select
 
@@ -14,11 +15,17 @@ from core.security import hash_password
 
 
 async def main() -> None:
+    # Argumen opsional; fallback ke env (ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_NAME) agar
+    # bisa dipanggil polos oleh entrypoint container. Idempoten (update bila sudah ada).
     parser = argparse.ArgumentParser()
-    parser.add_argument("--email", required=True)
-    parser.add_argument("--password", required=True)
-    parser.add_argument("--name", default="Admin")
+    parser.add_argument("--email", default=os.environ.get("ADMIN_EMAIL"))
+    parser.add_argument("--password", default=os.environ.get("ADMIN_PASSWORD"))
+    parser.add_argument("--name", default=os.environ.get("ADMIN_NAME", "Admin"))
     args = parser.parse_args()
+
+    if not args.email or not args.password:
+        print("create_admin: ADMIN_EMAIL/ADMIN_PASSWORD (atau --email/--password) tak diset — seed admin dilewati.")
+        return
 
     async with SessionLocal() as session:
         result = await session.execute(select(User).where(User.email == args.email))

@@ -13,6 +13,8 @@ htmlcov/
 
 # Env & secrets
 .env
+.env.production
+.env.local
 *.pem
 
 # Data & artefak lokal

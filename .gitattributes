@@ -1,2 +1,3 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Skrip shell WAJIB LF — CRLF bikin "bad interpreter" di entrypoint container.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf

@@ -1,0 +1,38 @@
+# Kecilkan build context + cegah venv/secret masuk image.
+.git
+.gitignore
+.venv
+.venv311
+.venv*
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Secrets — JANGAN bake ke image (config via compose env_file/environment)
+.env
+.env.production
+.env.local
+
+# Frontend — dibuild ulang di stage node
+web/node_modules
+web/dist
+web/*.tsbuildinfo
+
+# Artefak & lokal
+data
+*.db
+*.sqlite3
+celerybeat-schedule*
+celerybeat.pid
+*.log
+scratchpad
+docs
+tests
+.idea
+.vscode
+.DS_Store
+Thumbs.db

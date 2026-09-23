@@ -1,0 +1,99 @@
+# Overlay DEPLOY — naikkan app/worker/beat DI ATAS infra (docker-compose.yml).
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --build
+# Infra tidak diubah (dev Windows-venv tetap jalan). Ini TAMBAHAN, bukan pengganti.
+name: zandar
+
+# Konfigurasi bersama 3 container app (satu image zandar-app).
+x-app-common: &app-common
+  image: zandar-app:latest
+  restart: unless-stopped
+  env_file:
+    - .env
+
+# URL infra → SERVICE-NAME + PORT INTERNAL (bukan host-port). Menimpa .env (127.0.0.1).
+x-app-env: &app-env
+  DATABASE_URL: postgresql+asyncpg://zandar:zandar@postgres:5432/zandar
+  REDIS_URL: redis://redis:6379/0
+  QDRANT_URL: http://qdrant:6333
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: zandarneo4j
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: zandar
+  MINIO_SECRET_KEY: zandarminio
+
+services:
+  # --- Healthcheck tambahan utk service infra (agar depends_on bisa menunggu) ---
+  qdrant:
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+  neo4j:
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p zandarneo4j 'RETURN 1' >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+  minio:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # --- Aplikasi: API + SPA (uvicorn :8010) ---
+  app:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      <<: *app-env
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@zandar.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+    command: ["api"]
+    ports:
+      - "8010:8010"   # host 8010 → JANGAN :8000 (port pentest WSL)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8010/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
+
+  # --- Celery worker (koleksi + analisis) ---
+  worker:
+    <<: *app-common
+    environment:
+      <<: *app-env
+    command: ["worker"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # --- Celery beat (penjadwal koleksi) ---
+  beat:
+    <<: *app-common
+    environment:
+      <<: *app-env
+    command: ["beat"]
+    depends_on:
+      app:
+        condition: service_healthy
