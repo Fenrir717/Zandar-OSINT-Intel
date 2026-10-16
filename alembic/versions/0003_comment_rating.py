@@ -12,6 +12,7 @@ Create Date: 2026-09-06
 import sqlalchemy as sa
 
 from alembic import op
+from sqlalchemy import inspect
 
 revision = "0003"
 down_revision = "0002"
@@ -20,7 +21,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("comments", sa.Column("rating", sa.Integer(), nullable=True))
+    # Guarded for the same reason as 0002 — see its comment: 0001's create_all
+    # against live models already includes this column on a fresh database.
+    existing_cols = {c["name"] for c in inspect(op.get_bind()).get_columns("comments")}
+    if "rating" not in existing_cols:
+        op.add_column("comments", sa.Column("rating", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
